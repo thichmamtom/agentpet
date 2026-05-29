@@ -18,12 +18,45 @@ struct SetupView: View {
                 .tabItem { Label("Pet", systemImage: "pawprint.fill") }
             SetupTab(model: model, pet: pet)
                 .tabItem { Label("Setup", systemImage: "gearshape") }
+            GeneralTab()
+                .tabItem { Label("General", systemImage: "info.circle") }
         }
         .frame(width: 560, height: 580)
-        .tint(Theme.accent)
         .preferredColorScheme(.dark)
-        .background(Theme.background)
         .onAppear { model.refresh() }
+    }
+}
+
+// MARK: - General tab
+
+private struct GeneralTab: View {
+    var body: some View {
+        Form {
+            Section("Launch") {
+                Toggle(isOn: Binding(get: { LoginItem.isEnabled }, set: { LoginItem.setEnabled($0) })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Launch at login")
+                        Text("AgentPet starts automatically when you sign in.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Section("About") {
+                LabeledContent("Version", value: appVersion)
+            }
+
+            Section {
+                Button("Quit AgentPet") { NSApplication.shared.terminate(nil) }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var appVersion: String {
+        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
+        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        return "\(v) (\(b))"
     }
 }
 
@@ -83,7 +116,6 @@ private struct PetTab: View {
             }
         }
         .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
     }
 
     @ViewBuilder private var petPreview: some View {
@@ -142,7 +174,6 @@ private struct SetupTab: View {
             }
         }
         .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
     }
 
     private var notificationTitle: String {
