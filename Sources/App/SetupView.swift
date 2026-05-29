@@ -49,10 +49,10 @@ struct SetupView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Pet").font(.headline)
                     HStack(spacing: 12) {
-                        ForEach(model.availablePets) { option in
-                            PetCard(option: option,
-                                    selected: pet.currentPackName == option.name,
-                                    select: { pet.selectPack(named: option.name) })
+                        ForEach(PetKind.allCases) { kind in
+                            PetCard(kind: kind,
+                                    selected: pet.kind == kind,
+                                    select: { pet.kind = kind })
                         }
                     }
                 }
@@ -95,23 +95,24 @@ struct SetupView: View {
 }
 
 private struct PetCard: View {
-    let option: SettingsModel.PetOption
+    let kind: PetKind
     let selected: Bool
     let select: () -> Void
 
     var body: some View {
         Button(action: select) {
-            VStack(spacing: 6) {
-                Text(option.preview).font(.system(size: 34))
-                Text(option.name).font(.caption)
+            VStack(spacing: 4) {
+                PetSpriteView(kind: kind, mood: .idle, size: 64)
+                    .frame(width: 64, height: 56)
+                Text(kind.displayName).font(.caption)
             }
-            .frame(width: 76, height: 76)
+            .frame(width: 88, height: 92)
             .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(selected ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.08))
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(selected ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.08))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(selected ? Color.accentColor : .clear, lineWidth: 2)
             )
         }
