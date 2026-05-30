@@ -9,11 +9,11 @@ struct ColorSwitch: View {
     var body: some View {
         Capsule()
             .fill(isOn ? Color.systemAccent : Color(white: 0.42))
-            .frame(width: 38, height: 22)
+            .frame(width: 34, height: 18)
             .overlay(alignment: isOn ? .trailing : .leading) {
                 Circle()
                     .fill(.white)
-                    .frame(width: 18, height: 18)
+                    .frame(width: 14, height: 14)
                     .shadow(color: .black.opacity(0.25), radius: 1, y: 1)
                     .padding(2)
             }
