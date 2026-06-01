@@ -46,9 +46,16 @@
   <img src="../../assets/demo.gif" width="600" alt="エージェントの活動に反応するペット" />
 </div>
 
+## 動作環境
+
+- **macOS 13 Ventura 以降**（macOS 14 Sonoma 以降を推奨。キーボードのフォーカスリング無効化に macOS 14+ の API を使用）。
+- **Apple Silicon（M1/M2/M3/M4）と Intel Mac** の両方に対応。
+- 設計上 macOS 専用です。Windows / Linux 版はありません。
+- ソースからビルドするには: Xcode 16 / Swift 6。
+
 ## インストール
 
-> 公証済みリリース / Homebrew は近日公開。今のところソースからビルドしてください（Xcode 15+ / Swift 6）。
+> 公証済みリリース / Homebrew は近日公開。今のところソースからビルドしてください（Xcode 16 / Swift 6）。
 
 ```bash
 git clone https://github.com/ntd4996/agentpet.git

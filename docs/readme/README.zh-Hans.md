@@ -46,9 +46,16 @@
   <img src="../../assets/demo.gif" width="600" alt="宠物对智能体活动作出反应" />
 </div>
 
+## 系统要求
+
+- **macOS 13 Ventura 或更高版本**（推荐 macOS 14 Sonoma 及以上；关闭键盘焦点环使用了 macOS 14+ 的 API）。
+- 同时支持 **Apple Silicon（M1/M2/M3/M4）与 Intel Mac**。
+- 按设计仅支持 macOS，没有 Windows 或 Linux 版本。
+- 从源码构建需要：Xcode 16 / Swift 6。
+
 ## 安装
 
-> 公证版 / Homebrew 即将推出。目前请从源码构建（Xcode 15+ / Swift 6）。
+> 公证版 / Homebrew 即将推出。目前请从源码构建（Xcode 16 / Swift 6）。
 
 ```bash
 git clone https://github.com/ntd4996/agentpet.git

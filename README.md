@@ -47,9 +47,16 @@ Running multiple agents in parallel means constantly switching windows to check 
   <img src="assets/demo.gif" width="600" alt="Pet reacting to agent activity" />
 </div>
 
+## Requirements
+
+- **macOS 13 Ventura or later** (macOS 14 Sonoma+ recommended; the keyboard-focus-ring cleanup uses APIs available on macOS 14+).
+- **Apple Silicon (M1/M2/M3/M4) and Intel Macs** are both supported.
+- macOS only, by design. There is no Windows or Linux version.
+- To build from source: Xcode 16 / Swift 6.
+
 ## Install
 
-> Notarized release / Homebrew coming soon. For now, build from source (Xcode 15+ / Swift 6).
+> Notarized release / Homebrew coming soon. For now, build from source (Xcode 16 / Swift 6).
 
 ```bash
 git clone https://github.com/ntd4996/agentpet.git
