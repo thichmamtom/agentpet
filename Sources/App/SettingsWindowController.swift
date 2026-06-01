@@ -20,27 +20,28 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         // Show a Dock icon while Settings is open (requires .regular policy).
         NSApp.setActivationPolicy(.regular)
 
-        let host = ClickThroughHostingView(rootView: SetupView(onClose: { [weak self] in
+        let host = NSHostingView(rootView: SetupView(onClose: { [weak self] in
             self?.window?.close()
         }))
-        let panel = NSPanel(
+        // A normal window (not NSPanel) so SwiftUI text fields reliably receive
+        // keyboard input. Settings intentionally takes focus (shows a Dock icon).
+        let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 560, height: 600),
             styleMask: [.titled, .closable],
             backing: .buffered, defer: false
         )
-        panel.title = "AgentPet"
-        panel.delegate = self
-        panel.isReleasedWhenClosed = false
-        panel.contentView = host
-        panel.center()
-        self.window = panel
+        window.title = "AgentPet"
+        window.delegate = self
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.center()
+        self.window = window
 
         // Present on the next runloop tick so it reliably comes to the front
         // after the popover closes and the activation policy change settles.
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
-            panel.makeKeyAndOrderFront(nil)
-            panel.orderFrontRegardless()
+            window.makeKeyAndOrderFront(nil)
         }
     }
 
