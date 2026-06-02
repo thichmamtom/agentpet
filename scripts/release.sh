@@ -44,21 +44,40 @@ codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP/Contents
 codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 
-echo "==> Building DMG"
 DMG="$ROOT/build/AgentPet-$VERSION.dmg"
 STAGE="$ROOT/build/dmg"
-rm -f "$DMG"; rm -rf "$STAGE"; mkdir -p "$STAGE"
-cp -R "$APP" "$STAGE/AgentPet.app"
-ln -s /Applications "$STAGE/Applications"
-hdiutil create -volname "AgentPet" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+
+make_dmg() {
+    rm -f "$DMG"; rm -rf "$STAGE"; mkdir -p "$STAGE"
+    # ditto preserves the stapled notarization ticket inside the app bundle.
+    ditto "$APP" "$STAGE/AgentPet.app"
+    ln -s /Applications "$STAGE/Applications"
+    hdiutil create -volname "AgentPet" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+}
 
 if [ -n "${SKIP_NOTARIZE:-}" ]; then
     echo "==> Skipping notarization (SKIP_NOTARIZE set); signed-only build"
+    echo "==> Building DMG"
+    make_dmg
 else
-    echo "==> Notarizing (this can take a few minutes)"
+    # Notarize the APP first and staple it, so the ticket is embedded in the
+    # bundle that actually ships. Building the DMG before stapling (the old bug)
+    # left every distributed copy un-stapled, so Gatekeeper had to verify online
+    # and blocked the app whenever that check lagged.
+    echo "==> Notarizing the app (this can take a few minutes)"
+    ZIP="$ROOT/build/AgentPet-$VERSION-app.zip"
+    rm -f "$ZIP"
+    ditto -c -k --keepParent "$APP" "$ZIP"
+    xcrun notarytool submit "$ZIP" --keychain-profile "$PROFILE" --wait
+    xcrun stapler staple "$APP"
+    rm -f "$ZIP"
+
+    echo "==> Building DMG from the stapled app"
+    make_dmg
+
+    echo "==> Notarizing the DMG"
     xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait
     xcrun stapler staple "$DMG"
-    xcrun stapler staple "$APP"
 fi
 
 echo "==> Signing update for Sparkle appcast"
