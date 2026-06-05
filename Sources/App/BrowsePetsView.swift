@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// A searchable gallery to download new pets into the app.
 struct BrowsePetsView: View {
@@ -92,21 +93,32 @@ private struct RemotePetRow: View {
 /// Shows just the top-left frame of an 8×9 spritesheet, loaded on demand.
 private struct FirstFrameThumb: View {
     let urlString: String
+    // A custom loader (not AsyncImage) so we can send the Referer the Petdex
+    // CDN now requires; otherwise the thumbnail request 403s.
+    @State private var image: NSImage?
+    @State private var failed = false
 
     var body: some View {
-        AsyncImage(url: URL(string: urlString)) { phase in
-            if let image = phase.image {
-                image
+        Group {
+            if let image {
+                Image(nsImage: image)
                     .resizable()
                     .frame(width: 44 * 8, height: 48 * 9)
                     .frame(width: 44, height: 48, alignment: .topLeading)
                     .clipped()
-            } else if phase.error != nil {
+            } else if failed {
                 Image(systemName: "pawprint").foregroundStyle(.secondary)
             } else {
                 ProgressView().controlSize(.small)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .task(id: urlString) {
+            guard let url = URL(string: urlString) else { failed = true; return }
+            do {
+                let (data, _) = try await URLSession.shared.data(for: PetdexAssets.request(url))
+                if let img = NSImage(data: data) { image = img } else { failed = true }
+            } catch { failed = true }
+        }
     }
 }

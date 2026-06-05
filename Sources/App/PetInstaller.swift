@@ -1,6 +1,17 @@
 import Foundation
 import AgentPetCore
 
+/// Petdex's asset CDN added hotlink protection: requests without a Referer from
+/// its own site get 403, which broke all pet downloads. We're a documented
+/// Petdex interop client, so we send the expected Referer.
+enum PetdexAssets {
+    static func request(_ url: URL) -> URLRequest {
+        var r = URLRequest(url: url)
+        r.setValue("https://petdex.crafter.run/", forHTTPHeaderField: "Referer")
+        return r
+    }
+}
+
 /// Downloads a pet pack (pet.json + spritesheet) into `~/.agentpet/pets/<slug>/`.
 /// Shared by the Browse gallery and first-run onboarding.
 enum PetInstaller {
@@ -15,11 +26,11 @@ enum PetInstaller {
                 .appendingPathComponent("pets").appendingPathComponent(slug)
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
 
-            let (petJsonData, _) = try await URLSession.shared.data(from: petJsonURL)
+            let (petJsonData, _) = try await URLSession.shared.data(for: PetdexAssets.request(petJsonURL))
             let meta = try JSONDecoder().decode(PackMeta.self, from: petJsonData)
             try petJsonData.write(to: dir.appendingPathComponent("pet.json"))
 
-            let (sheetData, _) = try await URLSession.shared.data(from: spritesheetURL)
+            let (sheetData, _) = try await URLSession.shared.data(for: PetdexAssets.request(spritesheetURL))
             try sheetData.write(to: dir.appendingPathComponent(meta.spritesheetPath))
 
             return meta.id ?? slug
