@@ -152,7 +152,7 @@ private extension String {
 @MainActor
 enum DefaultPetBootstrap {
     private static let triedKey = "agentpet.defaultPetTried"
-    private static let manifestURL = URL(string: "https://petdex.crafter.run/api/manifest")!
+    private static let manifestURL = URL(string: "https://pets.thenightwatcher.online/manifest.json")!
     /// Preferred starter (a non-franchise original); falls back to any pet.
     private static let preferredSlug = "boba"
 
