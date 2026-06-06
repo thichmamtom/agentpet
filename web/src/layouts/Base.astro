@@ -157,16 +157,17 @@ const clouds = Array.from({ length: N_CLOUDS }, (_, i) => ({
   </script>
 
   <script>
-    // Auth nav: ask /api/me who's signed in and swap the "Sign in" button for an
-    // avatar + sign-out menu. Runs on every page (works on prerendered ones too).
-    (async () => {
+    // Auth nav: read the public `ap_user` cookie (set at login) so we render the
+    // avatar without an /api/me request on every page load.
+    function apReadUser(): { login: string; avatar: string } | null {
+      const m = document.cookie.match(/(?:^|; )ap_user=([^;]*)/);
+      if (!m) return null;
+      try { return JSON.parse(decodeURIComponent(m[1])); } catch { return null; }
+    }
+    (() => {
       const slot = document.getElementById("ap-auth");
       if (!slot) return;
-      let user: { login: string; avatar: string } | null = null;
-      try {
-        const r = await fetch("/api/me.json", { cache: "no-store" });
-        user = (await r.json()).user;
-      } catch {}
+      const user = apReadUser();
       if (!user) return;
       const login = String(user.login).replace(/[^a-zA-Z0-9-]/g, "");
       slot.innerHTML = `
@@ -203,9 +204,10 @@ const clouds = Array.from({ length: N_CLOUDS }, (_, i) => ({
         document.querySelectorAll(`[data-like-count][data-slug="${slug}"]`).forEach((el) => { el.textContent = String(n); });
       }
       async function refresh() {
+        const loggedIn = /(?:^|; )ap_user=/.test(document.cookie);
         const [s, m] = await Promise.all([
           fetch("/api/stats.json").then((r) => r.json()).catch(() => ({})),
-          fetch("/api/my-likes.json", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
+          loggedIn ? fetch("/api/my-likes.json", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})) : Promise.resolve({ mine: [] }),
         ]);
         const likes = (s as any).likes || {};
         const mine = new Set((m as any).mine || []);

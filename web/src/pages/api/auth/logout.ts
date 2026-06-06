@@ -5,6 +5,7 @@ export const prerender = false;
 
 const clear: APIRoute = async ({ request, cookies }) => {
   cookies.delete(SESSION_COOKIE, { path: "/" });
+  cookies.delete("ap_user", { path: "/" });
   const origin = new URL(request.url).origin;
   return new Response(null, { status: 302, headers: { Location: `${origin}/` } });
 };
