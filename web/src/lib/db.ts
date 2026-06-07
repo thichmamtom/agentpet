@@ -33,8 +33,57 @@ export async function ensureSchema(db: any): Promise<void> {
     db.prepare("CREATE TABLE IF NOT EXISTS collections (id TEXT PRIMARY KEY, title TEXT NOT NULL, slug TEXT NOT NULL UNIQUE, description TEXT, created_at INTEGER NOT NULL)"),
     db.prepare("CREATE TABLE IF NOT EXISTS collection_pets (collection_id TEXT NOT NULL, slug TEXT NOT NULL, added_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (collection_id, slug))"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_collection_pets_slug ON collection_pets (slug)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS pet_requests (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, user_id INTEGER NOT NULL, login TEXT NOT NULL, avatar TEXT, status TEXT NOT NULL DEFAULT 'open', created_at INTEGER NOT NULL)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS request_votes (request_id TEXT NOT NULL, user_id INTEGER NOT NULL, created_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (request_id, user_id))"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_pet_requests_status ON pet_requests (status)"),
   ]);
   ready = true;
+}
+
+// ---- pet requests (community wishlist) ----
+export interface PetRequest { id: string; title: string; description: string | null; user_id: number; login: string; avatar: string | null; status: string; created_at: number; votes: number; }
+
+export async function createRequest(db: any, r: { id: string; title: string; description: string | null; user_id: number; login: string; avatar: string | null; created_at: number }): Promise<void> {
+  await db.prepare("INSERT INTO pet_requests (id, title, description, user_id, login, avatar, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'open', ?)")
+    .bind(r.id, r.title, r.description, r.user_id, r.login, r.avatar, r.created_at).run();
+}
+
+export async function listRequests(db: any, status?: string): Promise<PetRequest[]> {
+  const base = "SELECT r.*, (SELECT COUNT(*) FROM request_votes v WHERE v.request_id = r.id) AS votes FROM pet_requests r";
+  const q = status
+    ? db.prepare(`${base} WHERE r.status=? ORDER BY votes DESC, r.created_at DESC`).bind(status)
+    : db.prepare(`${base} ORDER BY votes DESC, r.created_at DESC`);
+  const res: any = await q.all();
+  return res?.results ?? [];
+}
+
+export async function getRequest(db: any, id: string): Promise<PetRequest | null> {
+  return (await db.prepare("SELECT * FROM pet_requests WHERE id=?").bind(id).first()) ?? null;
+}
+
+// Which of these request ids the user has voted for.
+export async function userVotes(db: any, userId: number): Promise<string[]> {
+  const r: any = await db.prepare("SELECT request_id FROM request_votes WHERE user_id=?").bind(userId).all();
+  return (r?.results ?? []).map((x: any) => x.request_id);
+}
+
+export async function toggleRequestVote(db: any, requestId: string, userId: number): Promise<{ voted: boolean; votes: number }> {
+  const existing: any = await db.prepare("SELECT 1 FROM request_votes WHERE request_id=? AND user_id=?").bind(requestId, userId).first();
+  if (existing) await db.prepare("DELETE FROM request_votes WHERE request_id=? AND user_id=?").bind(requestId, userId).run();
+  else await db.prepare("INSERT OR IGNORE INTO request_votes (request_id, user_id, created_at) VALUES (?, ?, ?)").bind(requestId, userId, Date.now()).run();
+  const c: any = await db.prepare("SELECT COUNT(*) AS n FROM request_votes WHERE request_id=?").bind(requestId).first();
+  return { voted: !existing, votes: c?.n ?? 0 };
+}
+
+export async function setRequestStatus(db: any, id: string, status: string): Promise<void> {
+  await db.prepare("UPDATE pet_requests SET status=? WHERE id=?").bind(status, id).run();
+}
+
+export async function deleteRequest(db: any, id: string): Promise<void> {
+  await db.batch([
+    db.prepare("DELETE FROM request_votes WHERE request_id=?").bind(id),
+    db.prepare("DELETE FROM pet_requests WHERE id=?").bind(id),
+  ]);
 }
 
 // ---- collections (admin-curated groups of pets) ----
