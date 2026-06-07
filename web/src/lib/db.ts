@@ -30,8 +30,60 @@ export async function ensureSchema(db: any): Promise<void> {
     db.prepare("CREATE TABLE IF NOT EXISTS submissions (id TEXT PRIMARY KEY, slug TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL, description TEXT, sheet_ext TEXT NOT NULL, user_id INTEGER NOT NULL, login TEXT NOT NULL, avatar TEXT, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL, reviewed_at INTEGER)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions (status)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_submissions_user ON submissions (user_id)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS collections (id TEXT PRIMARY KEY, title TEXT NOT NULL, slug TEXT NOT NULL UNIQUE, description TEXT, created_at INTEGER NOT NULL)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS collection_pets (collection_id TEXT NOT NULL, slug TEXT NOT NULL, added_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (collection_id, slug))"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_collection_pets_slug ON collection_pets (slug)"),
   ]);
   ready = true;
+}
+
+// ---- collections (admin-curated groups of pets) ----
+export interface Collection { id: string; title: string; slug: string; description: string | null; created_at: number; }
+
+export async function listCollections(db: any): Promise<(Collection & { count: number; samples: string[] })[]> {
+  const c: any = await db.prepare("SELECT * FROM collections ORDER BY created_at ASC").all();
+  const cols: Collection[] = c?.results ?? [];
+  if (!cols.length) return [];
+  const m: any = await db.prepare("SELECT collection_id, slug FROM collection_pets ORDER BY added_at ASC").all();
+  const byCol: Record<string, string[]> = {};
+  for (const r of m?.results ?? []) (byCol[r.collection_id] ||= []).push(r.slug);
+  return cols.map((col) => ({ ...col, count: (byCol[col.id] || []).length, samples: (byCol[col.id] || []).slice(0, 4) }));
+}
+
+export async function getCollection(db: any, slug: string): Promise<Collection | null> {
+  return (await db.prepare("SELECT * FROM collections WHERE slug=?").bind(slug).first()) ?? null;
+}
+
+export async function collectionSlugs(db: any, collectionId: string): Promise<string[]> {
+  const r: any = await db.prepare("SELECT slug FROM collection_pets WHERE collection_id=? ORDER BY added_at ASC").bind(collectionId).all();
+  return (r?.results ?? []).map((x: any) => x.slug);
+}
+
+export async function collectionsForPet(db: any, slug: string): Promise<{ title: string; slug: string }[]> {
+  const r: any = await db
+    .prepare("SELECT c.title AS title, c.slug AS slug FROM collection_pets cp JOIN collections c ON c.id = cp.collection_id WHERE cp.slug=? ORDER BY c.created_at ASC")
+    .bind(slug)
+    .all();
+  return r?.results ?? [];
+}
+
+export async function createCollection(db: any, id: string, title: string, slug: string, description: string | null): Promise<void> {
+  await db.prepare("INSERT INTO collections (id, title, slug, description, created_at) VALUES (?, ?, ?, ?, ?)").bind(id, title, slug, description, Date.now()).run();
+}
+
+export async function deleteCollection(db: any, id: string): Promise<void> {
+  await db.batch([
+    db.prepare("DELETE FROM collection_pets WHERE collection_id=?").bind(id),
+    db.prepare("DELETE FROM collections WHERE id=?").bind(id),
+  ]);
+}
+
+export async function addPetToCollection(db: any, id: string, slug: string): Promise<void> {
+  await db.prepare("INSERT OR IGNORE INTO collection_pets (collection_id, slug, added_at) VALUES (?, ?, ?)").bind(id, slug, Date.now()).run();
+}
+
+export async function removePetFromCollection(db: any, id: string, slug: string): Promise<void> {
+  await db.prepare("DELETE FROM collection_pets WHERE collection_id=? AND slug=?").bind(id, slug).run();
 }
 
 // ---- community submissions ----
