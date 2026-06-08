@@ -112,7 +112,7 @@ export async function listCollections(db: any): Promise<(Collection & { count: n
   const m: any = await db.prepare("SELECT collection_id, slug FROM collection_pets ORDER BY added_at ASC").all();
   const byCol: Record<string, string[]> = {};
   for (const r of m?.results ?? []) (byCol[r.collection_id] ||= []).push(r.slug);
-  return cols.map((col) => ({ ...col, count: (byCol[col.id] || []).length, samples: (byCol[col.id] || []).slice(0, 4) }));
+  return cols.map((col) => ({ ...col, count: (byCol[col.id] || []).length, samples: (byCol[col.id] || []).slice(0, 5) }));
 }
 
 export async function getCollection(db: any, slug: string): Promise<Collection | null> {
