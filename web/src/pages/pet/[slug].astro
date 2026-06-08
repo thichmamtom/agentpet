@@ -75,7 +75,8 @@ const axisLabels = AXES.map((a) => ({ ...a, p: rpt(a.ang, RADAR.r + 17) }));
           </div>
           <!-- checker-backed preview, like a sprite editor canvas -->
           <div class="relative mx-6 mt-3 grid place-items-center rounded-2xl border border-line p-4 sprite-checker">
-            <canvas id="mainCanvas" class="h-56 w-full" width="320" height="260" data-sheet={`/api/sprite/${slug}`}></canvas>
+            <canvas id="mainCanvas" class="h-56 w-full cursor-pointer" width="320" height="260" data-sheet={`/api/sprite/${slug}`} title="Tap to cycle states"></canvas>
+            <span class="pointer-events-none absolute bottom-2 right-2 rounded-full bg-white/85 px-2 py-0.5 font-pixel text-[9px] tracking-wide text-faint shadow-sm">TAP TO CYCLE</span>
           </div>
           <div class="px-6 pb-5 pt-4">
             <div class="flex items-center justify-between">
@@ -112,9 +113,10 @@ const axisLabels = AXES.map((a) => ({ ...a, p: rpt(a.ang, RADAR.r + 17) }));
             <div><div class="flex items-center gap-1.5 font-display text-2xl font-bold text-ink"><Icon name="download" class="h-5 w-5 text-brand-500" /><span data-install-count data-slug={slug}>0</span></div><div class="text-xs text-faint">installs</div></div>
           </div>
           <div class="mt-7 flex flex-wrap gap-3">
-            <button type="button" data-like-btn data-slug={slug} aria-pressed="false" class="ap-like btn-ghost !px-6 !py-3"><Icon name="heart" class="ap-like-icon h-5 w-5" /> <span class="ap-like-label">Like</span></button>
             <a href="/install" class="btn-primary !px-6 !py-3"><Icon name="download" class="h-5 w-5" /> Adopt in AgentPet</a>
-            <a href={GITHUB} target="_blank" rel="noopener" class="btn-ghost !px-6 !py-3"><Icon name="github" class="h-4 w-4" /> Source</a>
+            <button type="button" data-like-btn data-slug={slug} aria-pressed="false" class="ap-like btn-ghost !px-6 !py-3"><Icon name="heart" class="ap-like-icon h-5 w-5" /> <span class="ap-like-label">Like</span></button>
+            <button type="button" id="shareBtn" class="btn-ghost !px-5 !py-3"><Icon name="share" class="h-4 w-4" /> <span id="shareLabel">Share</span></button>
+            <a href={GITHUB} target="_blank" rel="noopener" class="btn-ghost !px-5 !py-3"><Icon name="github" class="h-4 w-4" /> Source</a>
           </div>
         </div>
       </div>
@@ -272,9 +274,11 @@ const axisLabels = AXES.map((a) => ({ ...a, p: rpt(a.ang, RADAR.r + 17) }));
       const img = new Image();
       let rows: Frame[][] = [];
       let timer: number | null = null;
+      let cur = 0;
 
       const setText = (id: string, t: string) => { const el = document.getElementById(id); if (el) el.textContent = t; };
       const play = (i: number) => {
+        cur = i;
         if (timer) { clearInterval(timer); timer = null; }
         const frames = rows[i]; if (!frames) return;
         let idx = 0; drawFrame(mctx, main, img, frames[0], 0.92);
@@ -323,7 +327,20 @@ const axisLabels = AXES.map((a) => ({ ...a, p: rpt(a.ang, RADAR.r + 17) }));
         play(0);
       };
       img.src = main.dataset.sheet!;
+      main.addEventListener("click", () => { if (rows.length) play((cur + 1) % rows.length); });
     }
+
+    // Share: native share where available, else copy the link.
+    const shareBtn = document.getElementById("shareBtn");
+    shareBtn?.addEventListener("click", async () => {
+      const url = location.href;
+      const label = document.getElementById("shareLabel");
+      try {
+        if ((navigator as any).share) { await (navigator as any).share({ title: document.title, url }); return; }
+        await navigator.clipboard.writeText(url);
+        if (label) { label.textContent = "Copied!"; window.setTimeout(() => { label.textContent = "Share"; }, 1500); }
+      } catch {}
+    });
 
     // Shuffle + keyboard navigation (←/→ prev/next, Space shuffle).
     const shuffleBtn = document.getElementById("shuffleBtn") as HTMLButtonElement | null;
