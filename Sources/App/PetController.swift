@@ -19,6 +19,13 @@ final class PetController: ObservableObject {
             refreshChat()
         }
     }
+    /// Whether the pet shows a chat line while idle (the "doing nothing" chatter).
+    @Published var showIdleMessage: Bool {
+        didSet {
+            UserDefaults.standard.set(showIdleMessage, forKey: Self.idleMsgKey)
+            refreshChat()
+        }
+    }
     /// Sprite point size, freely adjustable via a slider.
     @Published var petPoint: Double {
         didSet { UserDefaults.standard.set(petPoint, forKey: Self.sizeKey) }
@@ -28,34 +35,43 @@ final class PetController: ObservableObject {
     static let maxPoint: Double = 240
     static let presets: [(String, Double)] = [("S", 84), ("M", 120), ("L", 168)]
 
-    /// Floating window size for a sprite point size (room for the bubble above).
-    static func windowSize(forPoint point: Double) -> CGSize {
-        CGSize(width: point + 110, height: point + 64)
+    /// Floating window size. Width is wide enough for agent-ticker lines;
+    /// height grows with the number of lines in the bubble.
+    static func windowSize(forPoint point: Double, lineCount: Int = 1) -> CGSize {
+        let count = max(lineCount, 1)
+        let bubbleH = CGFloat(count) * 22 + 16   // 22pt per line + top/bottom padding
+        return CGSize(
+            width: max(point + 110, 320),         // 320pt fits typical agent lines
+            height: point + bubbleH + 28          // 28pt for triangle + spacing + margin
+        )
     }
-    var windowSize: CGSize { Self.windowSize(forPoint: petPoint) }
+    var windowSize: CGSize { Self.windowSize(forPoint: petPoint, lineCount: max(chatLineCount, 1)) }
 
     private var lastResolved: PetMood = .idle
     private var latestSessions: [AgentSession] = []
     private var celebrateTimer: Timer?
-    private var chatTimer: Timer?
+
+    /// Number of active agent lines currently shown; drives window height.
+    @Published private(set) var chatLineCount: Int = 0
+    /// Sorted active sessions for the structured desktop bubble. Empty when idle/done/celebrate.
+    @Published private(set) var activeAgentSessions: [AgentSession] = []
 
     private static let petKey = "agentpet.selectedPetID"
     private static let chatKey = "agentpet.showChat"
+    private static let idleMsgKey = "agentpet.showIdleMessage"
     private static let sizeKey = "agentpet.petSize"
     private static let celebrateDuration: TimeInterval = 3
 
     init() {
         selectedPetID = UserDefaults.standard.string(forKey: Self.petKey)
         showChat = (UserDefaults.standard.object(forKey: Self.chatKey) as? Bool) ?? true
+        showIdleMessage = (UserDefaults.standard.object(forKey: Self.idleMsgKey) as? Bool) ?? true
         let saved = UserDefaults.standard.object(forKey: Self.sizeKey) as? Double ?? 120
         petPoint = min(max(saved, Self.minPoint), Self.maxPoint)
     }
 
     func start() {
-        // Vary the chat line periodically while the pet is active.
-        chatTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
-            Task { @MainActor [weak self] in self?.refreshChat() }
-        }
+        // Ticker drives chatLine updates; no separate chat timer needed.
     }
 
     private var sizeAnimTimer: Timer?
@@ -94,6 +110,8 @@ final class PetController: ObservableObject {
         defer { lastResolved = resolved }
 
         if resolved == .done && lastResolved != .done {
+            chatLineCount = 0
+            activeAgentSessions = []
             setMood(.celebrate)
             celebrateTimer?.invalidate()
             celebrateTimer = Timer.scheduledTimer(withTimeInterval: Self.celebrateDuration, repeats: false) { _ in
@@ -101,11 +119,36 @@ final class PetController: ObservableObject {
             }
             return
         }
-        if mood == .celebrate && resolved == .done {
-            return  // let the celebration finish
+        if mood == .celebrate {
+            return  // let the 3-second celebration finish regardless of new state
         }
         celebrateTimer?.invalidate()
         setMood(resolved)
+
+        if resolved == .working || resolved == .waiting {
+            if BubbleSettings.shared.multiAgentBubbleEnabled {
+                buildAgentChatLine(sessions: sessions)
+            } else {
+                chatLineCount = 0
+                activeAgentSessions = []
+                refreshChat()
+            }
+        } else {
+            chatLineCount = 0
+            activeAgentSessions = []
+        }
+    }
+
+    /// Rebuilds chat state when the user toggles multi-agent bubble mode.
+    func applyBubbleModeChange() {
+        guard mood == .working || mood == .waiting else { return }
+        if BubbleSettings.shared.multiAgentBubbleEnabled {
+            buildAgentChatLine(sessions: latestSessions)
+        } else {
+            chatLineCount = 0
+            activeAgentSessions = []
+            refreshChat()
+        }
     }
 
     private func settleAfterCelebrate() {
@@ -113,18 +156,66 @@ final class PetController: ObservableObject {
     }
 
     private func setMood(_ newMood: PetMood) {
+        let changed = newMood != mood
         mood = newMood
-        refreshChat()
+        // Only re-pick the line when the mood actually changes, so a periodic
+        // refresh (e.g. the 10s prune) doesn't keep swapping the idle line and
+        // resize/jump the pet. `reroll` forces a new pick on real transitions.
+        refreshChat(reroll: changed)
     }
 
-    private func refreshChat() {
-        let pool = ChatSettings.shared.lines(for: mood)
-        guard showChat, mood != .idle, !pool.isEmpty else {
+    private func refreshChat(reroll: Bool = true) {
+        guard showChat else {
             chatLine = ""
             StatusBarController.shared.refreshTitle()
             return
         }
-        chatLine = pool.randomElement() ?? ""
+        if mood == .idle {
+            guard showIdleMessage else {
+                chatLine = ""
+                StatusBarController.shared.refreshTitle()
+                return
+            }
+            if reroll || chatLine.isEmpty {
+                let pool = BubbleSettings.shared.multiAgentBubbleEnabled
+                    ? BubbleMessages.shared.lines(for: nil, mood: .idle)
+                    : ChatSettings.shared.lines(for: .idle)
+                chatLine = pool.randomElement() ?? IdleBoost.line()
+            }
+            StatusBarController.shared.refreshTitle()
+            return
+        }
+        // Multi-agent mode owns chatLine during working/waiting; otherwise use PetChat.
+        if (mood == .working || mood == .waiting)
+            && BubbleSettings.shared.multiAgentBubbleEnabled
+            && chatLineCount > 0 {
+            StatusBarController.shared.refreshTitle()
+            return
+        }
+        if reroll || chatLine.isEmpty {
+            let pool = BubbleSettings.shared.multiAgentBubbleEnabled
+                ? BubbleMessages.shared.lines(for: nil, mood: mood)
+                : ChatSettings.shared.lines(for: mood)
+            chatLine = pool.randomElement() ?? ""
+        }
+        StatusBarController.shared.refreshTitle()
+    }
+
+    // MARK: - Agent list
+
+    /// Builds the structured session list and a plain-text fallback chatLine.
+    private func buildAgentChatLine(sessions: [AgentSession]) {
+        let active = TickerFormatter.sorted(
+            sessions.filter { $0.state != .idle && $0.state != .registered }
+        )
+        activeAgentSessions = active
+        chatLineCount = active.count
+        if active.isEmpty {
+            chatLine = ""
+        } else {
+            // Plain-text fallback used by the menu bar chat pill (lineLimit(1) shows first line).
+            chatLine = active.map { "• \(TickerFormatter.line(for: $0))" }.joined(separator: "\n")
+        }
         StatusBarController.shared.refreshTitle()
     }
 }
