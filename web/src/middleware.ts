@@ -123,7 +123,7 @@ const PAGE = `<!doctype html>
 
     <div class="badge">Maintenance</div>
     <h1>We're tidying up the island</h1>
-    <p class="lead">The AgentPet website is taking a short break for maintenance. The desktop app keeps running , we'll be back online shortly.</p>
+    <p class="lead">The AgentPet website is taking a short break for maintenance. The desktop app keeps running, and we'll be back online shortly.</p>
     <p class="lead-vi">Website AgentPet đang bảo trì một chút, bọn mình sẽ quay lại sớm. App trên máy vẫn chạy bình thường. Cảm ơn bạn đã ghé!</p>
 
     <div class="actions">
