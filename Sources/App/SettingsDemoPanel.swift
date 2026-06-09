@@ -11,13 +11,15 @@ struct SettingsDemoPanel: View {
     @ObservedObject private var imagePets = ImagePetStore.shared
     @ObservedObject private var bubble = BubbleSettings.shared
     @ObservedObject private var bindings = PetBindingsStore.shared
+    // Observed so editing custom messages updates the preview bubble live.
+    @ObservedObject private var chat = ChatSettings.shared
+    @ObservedObject private var bubbleMsgs = BubbleMessages.shared
     var onClose: () -> Void
 
     @State private var sessions: [AgentSession] = []
     @State private var counter = 0
     @State private var celebrating = false
     @State private var lastAgg: PetMood = .idle
-    @State private var chatLine = ""
     @State private var celebrateTask: Task<Void, Never>?
     /// Drives the preview mood when multi-agent bubble is OFF (no sessions then).
     @State private var simpleMood: PetMood = .idle
@@ -34,6 +36,18 @@ struct SettingsDemoPanel: View {
     private var pack: ImagePetPack? { pet.selectedPetID.flatMap { imagePets.pack(id: $0) } }
     private func count(_ kind: AgentKind) -> Int { sessions.filter { $0.agentKind == kind }.count }
 
+    /// The fallback (idle/done/celebrate) bubble line, derived live from the
+    /// message stores so editing custom text updates the preview as you type.
+    /// Uses the first line (deterministic) rather than a random pick.
+    private var previewLine: String {
+        guard pet.showChat else { return "" }
+        if mood == .idle && !pet.showIdleMessage { return "" }
+        let pool = bubble.multiAgentBubbleEnabled
+            ? BubbleMessages.shared.lines(for: nil, mood: mood)
+            : ChatSettings.shared.lines(for: mood)
+        return pool.first ?? ""
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             previewColumn.frame(minWidth: 440, maxWidth: .infinity)
@@ -41,7 +55,6 @@ struct SettingsDemoPanel: View {
             addColumn.frame(width: 280)
         }
         .background(Color(white: 0.11))
-        .onAppear { refreshChat() }
         .onDisappear { celebrateTask?.cancel() }
     }
 
@@ -87,7 +100,6 @@ struct SettingsDemoPanel: View {
         simpleMood = m
         if m == .waiting { SoundSettings.shared.play(.waiting) }
         if m == .done || m == .celebrate { SoundSettings.shared.play(.done) }
-        refreshChat()
     }
 
     private var header: some View {
@@ -116,8 +128,8 @@ struct SettingsDemoPanel: View {
                     if bubble.multiAgentBubbleEnabled && !activeSessions.isEmpty {
                         AgentBubble(sessions: activeSessions)
                             .transition(.scale(scale: 0.7).combined(with: .opacity))
-                    } else if !chatLine.isEmpty && (mood != .idle || pet.showIdleMessage) {
-                        ChatBubble(text: chatLine)
+                    } else if !previewLine.isEmpty {
+                        ChatBubble(text: previewLine)
                             .transition(.scale(scale: 0.7).combined(with: .opacity))
                     }
                 }
@@ -130,7 +142,7 @@ struct SettingsDemoPanel: View {
         .frame(height: 300, alignment: .bottom)
         .clipped()
         .animation(.spring(response: 0.35, dampingFraction: 0.78), value: activeSessions.count)
-        .animation(.spring(response: 0.35, dampingFraction: 0.78), value: chatLine)
+        .animation(.spring(response: 0.35, dampingFraction: 0.78), value: previewLine)
         .animation(.spring(response: 0.35, dampingFraction: 0.78), value: mood)
     }
 
@@ -314,8 +326,8 @@ struct SettingsDemoPanel: View {
         after()
     }
 
-    /// Recompute mood, fire the done sound + celebrate burst on the working→done
-    /// edge, and refresh the fallback chat line.
+    /// Recompute mood and fire the done sound + celebrate burst on the
+    /// working→done edge. The preview line itself is derived (see `previewLine`).
     private func after() {
         let agg = MoodResolver.aggregate(sessions)
         if agg == .done && lastAgg != .done {
@@ -324,23 +336,11 @@ struct SettingsDemoPanel: View {
             celebrateTask?.cancel()
             celebrateTask = Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
-                if !Task.isCancelled { celebrating = false; refreshChat() }
+                if !Task.isCancelled { celebrating = false }
             }
         }
         if agg != .done { celebrating = false; celebrateTask?.cancel() }
         lastAgg = agg
-        refreshChat()
-    }
-
-    private func refreshChat() {
-        if mood == .idle && !pet.showIdleMessage {
-            chatLine = ""
-            return
-        }
-        let pool = bubble.multiAgentBubbleEnabled
-            ? BubbleMessages.shared.lines(for: nil, mood: mood)
-            : ChatSettings.shared.lines(for: mood)
-        chatLine = pet.showChat ? (pool.randomElement() ?? "") : ""
     }
 
     // MARK: sample data
