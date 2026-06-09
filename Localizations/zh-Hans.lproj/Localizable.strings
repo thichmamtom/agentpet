@@ -5,3 +5,30 @@
 "Pet" = "宠物";
 "Bubble" = "气泡";
 "About" = "关于";
+
+/* General / common */
+"Launch" = "启动";
+"Launch at login" = "登录时启动";
+"AgentPet starts automatically when you sign in." = "登录时自动启动 AgentPet。";
+"Notifications" = "通知";
+"Show chat bubble" = "显示聊天气泡";
+"Messages" = "消息";
+"System" = "系统";
+"Custom" = "自定义";
+"One message per line; a random one is shown." = "每行一句；随机显示其中一句。";
+"Reset to defaults" = "恢复默认";
+"Reset to default" = "恢复默认";
+"Sounds" = "声音";
+"Agent integrations" = "Agent 集成";
+"Hook installed" = "已安装 Hook";
+"Coming soon" = "即将推出";
+"Enable" = "启用";
+"Open Settings" = "打开设置";
+"Quit AgentPet" = "退出 AgentPet";
+"Upload…" = "上传…";
+"Default" = "默认";
+"Working" = "工作中";
+"Waiting" = "等待中";
+"Done" = "完成";
+"Celebrate" = "庆祝";
+"Idle" = "空闲";

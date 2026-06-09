@@ -5,3 +5,30 @@
 "Pet" = "Thú cưng";
 "Bubble" = "Bong bóng";
 "About" = "Giới thiệu";
+
+/* General / common */
+"Launch" = "Khởi động";
+"Launch at login" = "Khởi động khi đăng nhập";
+"AgentPet starts automatically when you sign in." = "AgentPet tự chạy khi bạn đăng nhập.";
+"Notifications" = "Thông báo";
+"Show chat bubble" = "Hiện bong bóng chat";
+"Messages" = "Tin nhắn";
+"System" = "Hệ thống";
+"Custom" = "Tùy chỉnh";
+"One message per line; a random one is shown." = "Mỗi dòng một câu; hiển thị ngẫu nhiên một câu.";
+"Reset to defaults" = "Khôi phục mặc định";
+"Reset to default" = "Khôi phục mặc định";
+"Sounds" = "Âm thanh";
+"Agent integrations" = "Tích hợp agent";
+"Hook installed" = "Đã cài hook";
+"Coming soon" = "Sắp có";
+"Enable" = "Bật";
+"Open Settings" = "Mở Cài đặt";
+"Quit AgentPet" = "Thoát AgentPet";
+"Upload…" = "Tải lên…";
+"Default" = "Mặc định";
+"Working" = "Đang làm";
+"Waiting" = "Đang chờ";
+"Done" = "Xong";
+"Celebrate" = "Ăn mừng";
+"Idle" = "Rảnh";

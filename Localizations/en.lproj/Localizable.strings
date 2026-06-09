@@ -5,3 +5,30 @@
 "Pet" = "Pet";
 "Bubble" = "Bubble";
 "About" = "About";
+
+/* General / common */
+"Launch" = "Launch";
+"Launch at login" = "Launch at login";
+"AgentPet starts automatically when you sign in." = "AgentPet starts automatically when you sign in.";
+"Notifications" = "Notifications";
+"Show chat bubble" = "Show chat bubble";
+"Messages" = "Messages";
+"System" = "System";
+"Custom" = "Custom";
+"One message per line; a random one is shown." = "One message per line; a random one is shown.";
+"Reset to defaults" = "Reset to defaults";
+"Reset to default" = "Reset to default";
+"Sounds" = "Sounds";
+"Agent integrations" = "Agent integrations";
+"Hook installed" = "Hook installed";
+"Coming soon" = "Coming soon";
+"Enable" = "Enable";
+"Open Settings" = "Open Settings";
+"Quit AgentPet" = "Quit AgentPet";
+"Upload…" = "Upload…";
+"Default" = "Default";
+"Working" = "Working";
+"Waiting" = "Waiting";
+"Done" = "Done";
+"Celebrate" = "Celebrate";
+"Idle" = "Idle";
