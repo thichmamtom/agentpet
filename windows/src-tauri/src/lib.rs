@@ -38,6 +38,10 @@ fn open_settings(app: tauri::AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .invoke_handler(tauri::generate_handler![
             list_agents,
             is_installed,
@@ -77,6 +81,19 @@ pub fn run() {
                 tray = tray.icon(icon.clone());
             }
             let _tray = tray.build(app)?;
+
+            // First run: open Settings so the user knows to pick a pet and
+            // connect an agent (otherwise the pet just sits there silently).
+            let marker = dirs::config_dir().map(|d| d.join("AgentPet").join(".onboarded"));
+            if let Some(m) = marker {
+                if !m.exists() {
+                    open_settings(app.handle().clone());
+                    if let Some(parent) = m.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    let _ = std::fs::write(&m, "1");
+                }
+            }
             Ok(())
         })
         .run(tauri::generate_context!())
