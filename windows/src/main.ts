@@ -1,0 +1,75 @@
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
+import { Pet } from "./pet";
+import { SessionStore } from "./state";
+import { loadCatalog, savedSlug, saveSlug } from "./catalog";
+
+const canvas = document.getElementById("pet") as HTMLCanvasElement;
+const bubble = document.getElementById("bubble") as HTMLDivElement;
+const pet = new Pet(canvas);
+const store = new SessionStore();
+
+const IDLE_LINES = [
+  "Let's grill some bugs.",
+  "Tiny commit, tiny dopamine.",
+  "The build is quiet. Too quiet.",
+  "Ship something small.",
+];
+const STATE_LABEL: Record<string, string> = {
+  working: "Working", waiting: "Needs you", done: "Done", registered: "Ready", idle: "Idle",
+};
+
+// --- pick + load a pet sprite -------------------------------------------------
+(async () => {
+  const pets = await loadCatalog();
+  if (!pets.length) return;
+  const slug = savedSlug();
+  const chosen = pets.find((p) => p.slug === slug) ?? pets[Math.floor(pets.length / 2)];
+  saveSlug(chosen.slug);
+  pet.load(chosen.spritesheetUrl);
+})();
+
+// --- render loop for state + bubble ------------------------------------------
+function render() {
+  const top = store.active()[0];
+  const state = top?.state ?? "idle";
+  pet.setState(state);
+
+  if (top && state !== "idle") {
+    const msg = top.message || STATE_LABEL[state] || "";
+    const proj = top.project ? top.project.split(/[\\/]/).pop() : "";
+    bubble.innerHTML =
+      `<span class="agent">${esc(top.agent)}</span>${proj ? " · " + esc(proj) : ""} ` +
+      `${esc(msg)}<span class="state">${STATE_LABEL[state] ?? ""}</span>`;
+    bubble.hidden = false;
+  } else {
+    bubble.hidden = true;
+  }
+}
+setInterval(render, 500);
+
+function esc(s: string): string {
+  return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c] || c));
+}
+
+// --- agent events from the Rust listener -------------------------------------
+listen<any>("agent-event", (e) => { store.update(e.payload); render(); });
+listen<string>("agent-end", (e) => { store.remove(e.payload); render(); });
+
+// --- interactions ------------------------------------------------------------
+// Drag the whole overlay by grabbing the pet.
+canvas.addEventListener("mousedown", async (e) => {
+  if (e.button === 0) await getCurrentWindow().startDragging();
+});
+// Double-click opens Settings.
+canvas.addEventListener("dblclick", () => { invoke("open_settings"); });
+
+// Occasional idle chatter.
+setInterval(() => {
+  if (store.topState() === "idle") {
+    bubble.textContent = IDLE_LINES[Math.floor(Date.now() / 1000) % IDLE_LINES.length];
+    bubble.hidden = false;
+    setTimeout(() => { if (store.topState() === "idle") bubble.hidden = true; }, 4000);
+  }
+}, 30000);
