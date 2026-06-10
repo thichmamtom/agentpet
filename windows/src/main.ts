@@ -4,6 +4,7 @@ import { Pet } from "./pet";
 import { SessionStore } from "./state";
 import { loadCatalog, savedSlug, saveSlug } from "./catalog";
 import { t, setLang, type Lang } from "./i18n";
+import { sendNotification, isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
 
 const canvas = document.getElementById("pet") as HTMLCanvasElement;
 const bubble = document.getElementById("bubble") as HTMLDivElement;
@@ -54,9 +55,31 @@ function esc(s: string): string {
   return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c] || c));
 }
 
+// --- notifications ------------------------------------------------------------
+let notifyReady = false;
+(async () => {
+  try { notifyReady = (await isPermissionGranted()) || (await requestPermission()) === "granted"; } catch {}
+})();
+const lastState = new Map<string, string>();
+function maybeNotify(e: { agent: string; session: string; state: string; project: string }) {
+  const key = `${e.agent}:${e.session}`;
+  const prev = lastState.get(key);
+  lastState.set(key, e.state);
+  if (e.state === prev) return;
+  if (e.state !== "done" && e.state !== "waiting") return;
+  if (!notifyReady || localStorage.getItem("ap_notify") === "0") return;
+  const proj = (e.project ? e.project.split(/[\\/]/).pop() : "") || e.agent;
+  const label = t(e.state === "done" ? "Done" : "Needs you");
+  try { sendNotification({ title: `AgentPet , ${label}`, body: `${e.agent} · ${proj}` }); } catch {}
+}
+
 // --- agent events from the Rust listener -------------------------------------
-listen<any>("agent-event", (e) => { store.update(e.payload); render(); });
-listen<string>("agent-end", (e) => { store.remove(e.payload); render(); });
+listen<any>("agent-event", (e) => { maybeNotify(e.payload); store.update(e.payload); render(); });
+listen<string>("agent-end", (e) => {
+  for (const k of [...lastState.keys()]) if (k.endsWith(`:${e.payload}`)) lastState.delete(k);
+  store.remove(e.payload);
+  render();
+});
 // Pet changed from the Settings window.
 listen<{ slug: string; url: string }>("set-pet", (e) => {
   pet.load(e.payload.url);

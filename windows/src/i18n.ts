@@ -26,6 +26,8 @@ const DICT: Record<Exclude<Lang, "en">, Record<string, string>> = {
     "No \"needs input\" alerts (Antigravity has no notification hook)":
       "Không có cảnh báo \"cần nhập\" (Antigravity không có hook thông báo)",
     "Hooks the default Kiro CLI agent": "Gắn vào agent mặc định của Kiro CLI",
+    "Notifications": "Thông báo",
+    "Notify when an agent finishes or needs you": "Báo khi agent xong hoặc cần bạn",
     "Startup": "Khởi động",
     "Start AgentPet when Windows starts": "Chạy AgentPet khi khởi động Windows",
     "Couldn't load pets , check your internet connection.":
@@ -61,6 +63,8 @@ const DICT: Record<Exclude<Lang, "en">, Record<string, string>> = {
     "No \"needs input\" alerts (Antigravity has no notification hook)":
       "没有\"需要输入\"提醒（Antigravity 没有通知 hook）",
     "Hooks the default Kiro CLI agent": "挂接 Kiro CLI 的默认 agent",
+    "Notifications": "通知",
+    "Notify when an agent finishes or needs you": "当 agent 完成或需要你时通知",
     "Startup": "启动",
     "Start AgentPet when Windows starts": "Windows 启动时运行 AgentPet",
     "Couldn't load pets , check your internet connection.": "无法加载宠物 , 请检查网络连接。",

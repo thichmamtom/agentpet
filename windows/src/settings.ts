@@ -98,6 +98,13 @@ async function initPet() {
   });
 }
 
+// --------------------------------------------------------- notifications ----
+function initNotify() {
+  const box = document.getElementById("notify") as HTMLInputElement;
+  box.checked = localStorage.getItem("ap_notify") !== "0";
+  box.addEventListener("change", () => localStorage.setItem("ap_notify", box.checked ? "1" : "0"));
+}
+
 // --------------------------------------------------------------- startup ----
 async function initAutostart() {
   const box = document.getElementById("autostart") as HTMLInputElement;
@@ -115,6 +122,8 @@ function applyStatic() {
   set("t-pet-sub", "Pick the companion that floats on your desktop.");
   set("t-agents", "Agent integrations");
   set("t-agents-sub", "Install a hook so AgentPet can see when an agent works, finishes, or needs you.");
+  set("t-notif", "Notifications");
+  set("t-notify", "Notify when an agent finishes or needs you");
   set("t-startup", "Startup");
   set("t-autostart", "Start AgentPet when Windows starts");
   search.placeholder = t("Search pets by name...");
@@ -143,4 +152,5 @@ function esc(s: string): string {
 initLang();
 loadAgents();
 initPet();
+initNotify();
 initAutostart();
