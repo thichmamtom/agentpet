@@ -46,6 +46,7 @@ private struct PetContentSizeKey: PreferenceKey {
 struct FloatingPetView: View {
     @ObservedObject private var pet = PetController.shared
     @ObservedObject private var bubbleSettings = BubbleSettings.shared
+    @ObservedObject private var appLang = AppLanguage.shared
 
     var body: some View {
         VStack(spacing: 2) {
@@ -71,9 +72,11 @@ struct FloatingPetView: View {
         .onPreferenceChange(PetContentSizeKey.self) { size in
             PetWindowController.shared.resizeToContent(size)
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: pet.chatLine)
+        .animation(.easeInOut(duration: 0.22), value: pet.chatLine)
         .animation(.spring(response: 0.35, dampingFraction: 0.7), value: pet.activeAgentSessions.count)
         .animation(.easeInOut, value: pet.showChat)
+        // Re-resolve bubble text when the app language changes at runtime.
+        .environment(\.locale, appLang.locale)
     }
 }
 
