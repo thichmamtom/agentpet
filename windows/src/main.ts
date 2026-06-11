@@ -263,10 +263,13 @@ listen("bubble-changed", () => { applyBubble(); applyPet(); moodLine = ""; rende
 canvas.addEventListener("mousedown", async (e) => {
   if (e.button !== 0) return;
   if (!pet.hitTest(e.offsetX, e.offsetY)) return;
+  emit("popover-close", null);
   await getCurrentWindow().startDragging();
 });
 bubbleEl.addEventListener("mousedown", async (e) => {
-  if (e.button === 0) await getCurrentWindow().startDragging();
+  if (e.button !== 0) return;
+  emit("popover-close", null);
+  await getCurrentWindow().startDragging();
 });
 canvas.addEventListener("contextmenu", (e) => {
   e.preventDefault();

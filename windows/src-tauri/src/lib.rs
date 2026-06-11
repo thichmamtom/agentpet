@@ -191,10 +191,21 @@ fn show_popover(app: &tauri::AppHandle) {
                 .always_on_top(true)
                 .skip_taskbar(true)
                 .resizable(false)
+                .focused(true)
                 .visible(false)
                 .build()
             {
-                Ok(w) => w,
+                Ok(w) => {
+                    // Transient popover: losing focus hides it (Rust-side net,
+                    // independent of the webview's own blur listener).
+                    let wh = w.clone();
+                    w.on_window_event(move |ev| {
+                        if let tauri::WindowEvent::Focused(false) = ev {
+                            let _ = wh.hide();
+                        }
+                    });
+                    w
+                }
                 Err(_) => return,
             }
         }

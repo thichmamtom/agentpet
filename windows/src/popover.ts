@@ -137,9 +137,14 @@ updatesBtn.onclick = async () => {
 // ---- lifecycle ----------------------------------------------------------------
 
 // Hide when clicking anywhere outside (the popover loses focus), like the
-// macOS transient popover.
+// macOS transient popover. Backed up by a Rust-side Focused(false) handler,
+// a "popover-close" broadcast from the pet window, and the Escape key.
 getCurrentWindow().onFocusChanged(({ payload: focused }) => {
   if (!focused) void getCurrentWindow().hide();
+});
+listen("popover-close", () => void getCurrentWindow().hide());
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") void getCurrentWindow().hide();
 });
 
 listen<AgentEventPayload>("agent-event", (e) => { store.update(e.payload); paint(); });

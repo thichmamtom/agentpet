@@ -757,12 +757,7 @@ body.pop {
   overflow: hidden;
 }
 .pop-head { display: flex; align-items: center; gap: 10px; padding: 13px 14px; }
-.pop-appicon {
-  width: 30px; height: 30px; border-radius: 8px; flex: 0 0 auto;
-  background: #7366fa; color: #fff;
-  display: flex; align-items: center; justify-content: center;
-}
-.pop-appicon svg { width: 16px; height: 16px; }
+.pop-appicon-img { width: 32px; height: 32px; flex: 0 0 auto; }
 .pop-meta b { font-size: 14px; }
 .pop-meta .cap { font-size: 11px; }
 .pop-divider { height: 1px; background: rgba(255,255,255,0.08); flex: 0 0 auto; }
