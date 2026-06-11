@@ -637,3 +637,31 @@ body.settings:not(.demo-open) .main-col { flex: 1 1 auto; width: auto; }
 .bubble .icon-slot { display: inline-flex; align-items: center; flex: 0 0 auto; }
 .bubble .icon-slot.emoji { font-size: 12px; line-height: 14px; }
 .bubble .icon-slot .aicon { width: 14px; height: 14px; }
+
+/* ---- mac-exact tweaks ---- */
+.small-btn {
+  background: rgba(255,255,255,0.1); border: 0; border-radius: 8px;
+  color: var(--txt); padding: 7px 14px; font-size: 12.5px; cursor: pointer; flex: 0 0 auto;
+}
+.small-btn:hover { background: rgba(255,255,255,0.17); }
+.two-btns { justify-content: flex-start; }
+/* pet cells: outline border like the macOS PetThumb */
+.pet-item { background: transparent; border: 1px solid rgba(255,255,255,0.18); }
+.pet-item:hover { background: rgba(255,255,255,0.06); }
+.pet-item.sel { border: 2px solid var(--accent); background: rgba(10,132,255,0.16); padding: 11px 5px 8px; }
+/* pager arrows: plain chevrons (mac), no boxes */
+.pager-nav button { background: transparent; color: var(--sec); font-size: 16px; width: 30px; height: 26px; }
+.pager-nav button:not(:disabled):hover { background: transparent; color: var(--txt); }
+/* full-width segmented (animations mood) */
+.seg-full { display: flex; }
+.seg-full button { flex: 1; }
+/* animation clip grid (mac AnimationPicker) */
+.anim-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 10px; }
+.anim-cell {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: transparent; border: 1px solid rgba(255,255,255,0.16); border-radius: 9px;
+  padding: 6px 5px 4px; cursor: pointer;
+}
+.anim-cell canvas { width: 54px; height: 44px; image-rendering: pixelated; }
+.anim-cell:hover { background: rgba(255,255,255,0.06); }
+.anim-cell.sel { border: 2px solid var(--accent); background: rgba(10,132,255,0.16); padding: 5px 4px 3px; }

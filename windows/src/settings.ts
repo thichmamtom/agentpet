@@ -5,10 +5,10 @@ import { exit } from "@tauri-apps/plugin-process";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { loadCatalog, savedSlug, saveSlug, getLibrary, addToLibrary, removeFromLibrary, type Pet, type LibPet } from "./catalog";
 import { t, getLang, setLang, type Lang } from "./i18n";
-import { SessionStore, basename, type AgentEventPayload, type Session } from "./state";
 import { agentIconUrl } from "./icons";
-import { LAYOUT_PRESETS, readBubbleConfig, elapsedString, type TokenItem, type BubbleToken } from "./bubble";
+import { LAYOUT_PRESETS, readBubbleConfig, type TokenItem, type BubbleToken } from "./bubble";
 import { initDemo } from "./demo";
+import { slice, type Rect } from "./pet";
 
 // ------------------------------------------------------------- segmented ----
 // macOS-style segmented controls: <span class="seg" data-key data-default>.
@@ -97,66 +97,6 @@ function renderAgents() {
     row.appendChild(btn);
     agentsRoot.appendChild(row);
   }
-}
-
-// ------------------------------------------------------------- sessions ----
-// Live agent list (the macOS menu bar popover's Agents section): dot, project,
-// activity, live elapsed, hover ✕ to dismiss, Clear all.
-const sessionStore = new SessionStore();
-
-function initSessions() {
-  const list = document.getElementById("sessions-list")!;
-  const empty = document.getElementById("sessions-empty")!;
-  const clearRow = document.getElementById("sessions-clear-row")!;
-  (document.getElementById("sessions-clear") as HTMLButtonElement).onclick = () => {
-    sessionStore.clear();
-    emit("sessions-clear", null);
-    paint();
-  };
-
-  function paint() {
-    const sessions = sessionStore.active().filter((s) => s.state !== "idle" && s.state !== "registered");
-    empty.style.display = sessions.length ? "none" : "";
-    clearRow.style.display = sessions.length ? "" : "none";
-    list.innerHTML = "";
-    for (const s of sessions) {
-      const row = document.createElement("div");
-      row.className = "sess-row";
-      row.dataset.state = s.state;
-      const icon = agentIconUrl(s.agent);
-      row.innerHTML =
-        `<span class="sess-dot"></span>` +
-        (icon ? `<img class="sess-icon" src="${icon}" alt="">` : "") +
-        `<span class="sess-meta"><span class="sess-name">${esc(s.project ? basename(s.project) : s.session)}</span>` +
-        `<span class="sess-sub">${esc(s.title || s.live || t(s.state.charAt(0).toUpperCase() + s.state.slice(1)))}</span></span>` +
-        `<span class="sess-time" data-since="${s.stateSince}">${elapsedString(s.stateSince)}</span>`;
-      const x = document.createElement("button");
-      x.className = "sess-x";
-      x.textContent = "✕";
-      x.title = t("Dismiss");
-      x.onclick = () => {
-        const key = `${s.agent}:${s.session}`;
-        sessionStore.removeKey(key);
-        emit("session-dismiss", key);
-        paint();
-      };
-      row.appendChild(x);
-      list.appendChild(row);
-    }
-  }
-
-  listen<AgentEventPayload>("agent-event", (e) => { sessionStore.update(e.payload); paint(); });
-  listen<string>("agent-end", (e) => { sessionStore.remove(e.payload); paint(); });
-  // Catch up on sessions that started before this window opened.
-  listen<Session>("session-snapshot", (e) => { sessionStore.seed(e.payload); paint(); });
-  emit("sessions-request", null);
-  setInterval(() => {
-    paint();
-    list.querySelectorAll<HTMLElement>(".sess-time[data-since]").forEach((el) => {
-      el.textContent = elapsedString(Number(el.dataset.since));
-    });
-  }, 2000);
-  paint();
 }
 
 // ------------------------------------------------------------------ pet ----
@@ -310,7 +250,10 @@ async function initPet() {
   if (!getLibrary().length) {
     const slug = savedSlug();
     const c = catalog.find((p) => p.slug === slug) ?? catalog[Math.floor(catalog.length / 2)];
-    if (c) addToLibrary({ slug: c.slug, name: c.name, url: c.spritesheetUrl, petJsonUrl: c.petJsonUrl });
+    if (c) {
+      addToLibrary({ slug: c.slug, name: c.name, url: c.spritesheetUrl, petJsonUrl: c.petJsonUrl });
+      if (!localStorage.getItem("ap_pet_url")) localStorage.setItem("ap_pet_url", c.spritesheetUrl);
+    }
   }
   renderPage();
   showCurrent();
@@ -515,15 +458,11 @@ const MSG_AGENTS: [string, string][] = [
 function initBubble() {
   const changed = () => { emit("bubble-changed", null); };
   const opacity = document.getElementById("opacity") as HTMLInputElement;
-  const fontFamily = document.getElementById("font-family") as HTMLSelectElement;
   const msgAgent = document.getElementById("msg-agent") as HTMLSelectElement;
   const editors = document.getElementById("msg-editors")!;
 
   opacity.value = localStorage.getItem("ap_opacity") || "92";
-  fontFamily.value = localStorage.getItem("ap_font_family") || "system";
-
   opacity.oninput = () => { localStorage.setItem("ap_opacity", opacity.value); changed(); };
-  fontFamily.onchange = () => { localStorage.setItem("ap_font_family", fontFamily.value); changed(); };
 
   // Multi-agent bubble master toggle (mac BubbleSettings.multiAgentBubbleEnabled).
   const multi = document.getElementById("multi") as HTMLInputElement;
@@ -809,31 +748,92 @@ function initAgentIcons() {
 }
 
 // ------------------------------------------------------------ animations ----
-// Bind a spritesheet row to each mood (the macOS PetBindings + AnimationPicker).
-const SHEET_ROWS = ["Idle", "Run right", "Run left", "Waving", "Jumping", "Failed", "Waiting", "Running", "Review"];
+// The macOS AnimationPicker: a segmented mood selector over a grid of clip
+// thumbnails sliced from the current pet's sheet. Hover = animated preview,
+// click = bind that clip to the selected mood (ap_bind_<mood>).
 const MOOD_DEFAULT_ROW: Record<string, number> = { idle: 0, working: 7, waiting: 6, done: 3, celebrate: 4 };
 
 function initAnimations() {
-  const root = document.getElementById("anim-rows")!;
-  const changed = () => emit("bubble-changed", null);
-  for (const [mood, label] of [["idle", "Idle"], ["working", "Working"], ["waiting", "Needs you"], ["done", "Done"], ["celebrate", "Celebrate"]] as const) {
-    const row = document.createElement("div");
-    row.className = "row";
-    const name = document.createElement("span");
-    name.textContent = t(label);
-    const sel = document.createElement("select");
-    SHEET_ROWS.forEach((rn, i) => {
-      const o = document.createElement("option");
-      o.value = String(i);
-      o.textContent = t(rn);
-      sel.appendChild(o);
+  const grid = document.getElementById("anim-grid")!;
+  const moodSeg = document.getElementById("anim-mood")!;
+  let mood = "working";
+  let img: HTMLImageElement | null = null;
+  let clips: Rect[][] = [];
+  let hoverTimer: number | null = null;
+
+  const boundClip = (m: string) => {
+    const v = parseInt(localStorage.getItem(`ap_bind_${m}`) ?? "", 10);
+    return Number.isFinite(v) && v >= 0 ? Math.min(v, Math.max(0, clips.length - 1)) : Math.min(MOOD_DEFAULT_ROW[m] ?? 0, Math.max(0, clips.length - 1));
+  };
+
+  const drawFrame = (cv: HTMLCanvasElement, clip: Rect[], frame: number) => {
+    const ctx = cv.getContext("2d");
+    if (!ctx || !img || !clip.length) return;
+    const r = clip[frame % clip.length];
+    const maxW = Math.max(...clip.map((x) => x.w));
+    const sc = Math.min(cv.width / maxW, cv.height / r.h);
+    const dw = r.w * sc, dh = r.h * sc;
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(img, r.x, r.y, r.w, r.h, (cv.width - dw) / 2, cv.height - dh, dw, dh);
+  };
+
+  const paint = () => {
+    grid.innerHTML = "";
+    if (!clips.length) return;
+    const current = boundClip(mood);
+    clips.forEach((clip, i) => {
+      const cell = document.createElement("button");
+      cell.className = "anim-cell" + (i === current ? " sel" : "");
+      const cv = document.createElement("canvas");
+      cv.width = 54; cv.height = 44;
+      drawFrame(cv, clip, 0);
+      const label = document.createElement("span");
+      label.className = "cap";
+      label.textContent = `${t("Clip")} ${i + 1}`;
+      cell.appendChild(cv);
+      cell.appendChild(label);
+      cell.onclick = () => {
+        localStorage.setItem(`ap_bind_${mood}`, String(i));
+        emit("bubble-changed", null);
+        paint();
+      };
+      // Hover = animate this clip (mac hover preview).
+      cell.onmouseenter = () => {
+        let f = 0;
+        if (hoverTimer) clearInterval(hoverTimer);
+        hoverTimer = window.setInterval(() => drawFrame(cv, clip, ++f), 125);
+      };
+      cell.onmouseleave = () => {
+        if (hoverTimer) clearInterval(hoverTimer);
+        hoverTimer = null;
+        drawFrame(cv, clip, 0);
+      };
+      grid.appendChild(cell);
     });
-    sel.value = localStorage.getItem(`ap_bind_${mood}`) ?? String(MOOD_DEFAULT_ROW[mood]);
-    sel.onchange = () => { localStorage.setItem(`ap_bind_${mood}`, sel.value); changed(); };
-    row.appendChild(name);
-    row.appendChild(sel);
-    root.appendChild(row);
-  }
+  };
+
+  moodSeg.querySelectorAll<HTMLButtonElement>("button").forEach((b) => {
+    b.onclick = () => {
+      mood = b.dataset.v!;
+      moodSeg.querySelectorAll("button").forEach((x) => x.classList.toggle("sel", x === b));
+      paint();
+    };
+  });
+
+  const loadSheet = () => {
+    const lib = getLibrary();
+    const sel = lib.find((x) => x.slug === savedSlug()) ?? lib[0];
+    const url = localStorage.getItem("ap_pet_custom") || localStorage.getItem("ap_pet_url") || sel?.url;
+    if (!url) { setTimeout(loadSheet, 3000); return; } // library may seed late
+    const im = new Image();
+    im.crossOrigin = "anonymous";
+    im.onload = () => { img = im; clips = slice(im); paint(); };
+    im.onerror = () => { img = null; clips = []; grid.innerHTML = ""; };
+    im.src = url.startsWith("data:") ? url : url + (url.includes("?") ? "&" : "?") + "cors=1";
+  };
+  loadSheet();
+  listen("set-pet", () => setTimeout(loadSheet, 50));
 }
 
 // ----------------------------------------------------------------- sounds ----
@@ -944,15 +944,12 @@ function applyStatic() {
   // general
   set("t-lang", "Language");
   set("t-lang2", "Language");
-  set("t-startup", "Startup");
+  set("t-startup", "Launch");
   set("t-autostart", "Launch at login");
   set("t-autostart-sub", "AgentPet starts automatically when you sign in.");
   set("t-notif", "Notifications");
-  set("t-notify", "Notifications");
+  set("t-notify", "Notifications on");
   set("t-notify-sub", "Alerts when an agent finishes or needs input");
-  set("t-sessions", "Agents");
-  set("t-no-agents", "Nothing running right now.");
-  set("sessions-clear", "Clear all");
   set("t-sounds", "Sounds");
   set("t-sound-done", "When an agent finishes");
   set("t-sound-waiting", "When an agent needs input");
@@ -961,7 +958,7 @@ function applyStatic() {
   set("t-df-done", "Default");
   set("t-df-waiting", "Default");
   set("t-agents", "Agent integrations");
-  set("t-app", "App");
+  set("t-app", "About");
   set("t-version", "Version");
   set("quit-btn", "Quit AgentPet");
   // pet
@@ -986,6 +983,12 @@ function applyStatic() {
   set("cr-choose", "Choose image…");
   set("t-size", "Size on screen");
   set("t-anims", "Animations");
+  set("t-anim-hint", "Hover a clip to preview it.");
+  set("am-idle", "Idle");
+  set("am-working", "Working");
+  set("am-waiting", "Waiting");
+  set("am-done", "Done");
+  set("am-celebrate", "Celebrate");
   set("t-petsize", "Pet size");
   set("t-fx", "Idle bobbing animation");
   // bubble
@@ -993,13 +996,9 @@ function applyStatic() {
   set("t-theme", "Theme");
   set("t-opacity", "Opacity");
   set("t-fontsize", "Text size");
-  set("t-font", "Font");
   set("o-dark", "Dark");
   set("o-light", "Light");
   set("o-theme-system", "System");
-  set("o-system", "System");
-  set("o-rounded", "Rounded");
-  set("o-mono", "Monospace");
   set("t-idle", "Show idle message");
   set("t-idle-sub", "The pet's chatter while no agent is running.");
   set("t-display", "Display");
@@ -1143,7 +1142,6 @@ initBubbleDisplay();
 initAgentIcons();
 initAnimations();
 initSounds();
-initSessions();
 initNotify();
 initAutostart();
 initSliders();

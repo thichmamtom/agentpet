@@ -30,7 +30,7 @@ const STATE_FPS: Record<string, number> = {
   registered: 3,
 };
 
-interface Rect { x: number; y: number; w: number; h: number }
+export interface Rect { x: number; y: number; w: number; h: number }
 
 /// Contiguous runs of `true` in an occupancy array → [start, end) pairs.
 function segments(occ: Uint8Array): Array<[number, number]> {
@@ -45,7 +45,7 @@ function segments(occ: Uint8Array): Array<[number, number]> {
 }
 
 /// Alpha-gutter slice: rows by transparent bands, then frames within each row.
-function slice(img: HTMLImageElement): Rect[][] {
+export function slice(img: HTMLImageElement): Rect[][] {
   const w = img.naturalWidth, h = img.naturalHeight;
   if (!w || !h) return [];
   const cv = document.createElement("canvas");

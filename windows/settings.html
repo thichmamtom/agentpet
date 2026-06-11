@@ -44,7 +44,7 @@
         </div>
 
         <div class="group">
-          <div class="ghead" id="t-startup">Startup</div>
+          <div class="ghead" id="t-startup">Launch</div>
           <div class="gcard">
             <label class="row"><span class="rt"><span id="t-autostart">Launch at login</span>
               <span class="cap" id="t-autostart-sub">AgentPet starts automatically when you sign in.</span></span>
@@ -53,20 +53,9 @@
         </div>
 
         <div class="group">
-          <div class="ghead" id="t-sessions">Agents</div>
-          <div class="gcard">
-            <div id="sessions-list"></div>
-            <div class="row" id="sessions-empty"><span class="cap" id="t-no-agents">Nothing running right now.</span></div>
-            <div class="row center" id="sessions-clear-row" style="display:none">
-              <button class="linklike" id="sessions-clear">Clear all</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="group">
           <div class="ghead" id="t-notif">Notifications</div>
           <div class="gcard">
-            <label class="row"><span class="rt"><span id="t-notify">Notifications</span>
+            <label class="row"><span class="rt"><span id="t-notify">Notifications on</span>
               <span class="cap" id="t-notify-sub">Alerts when an agent finishes or needs input</span></span>
               <input type="checkbox" id="notify" /></label>
           </div>
@@ -106,7 +95,7 @@
         </div>
 
         <div class="group">
-          <div class="ghead" id="t-app">App</div>
+          <div class="ghead" id="t-app">About</div>
           <div class="gcard">
             <div class="row"><span id="t-version">Version</span><span class="dim" id="app-version">0.1.0</span></div>
             <div class="row center"><button class="quit" id="quit-btn">Quit AgentPet</button></div>
@@ -138,15 +127,25 @@
               <button id="pg-next">›</button>
             </div>
             <div class="two-btns">
-              <button class="ghost-btn" id="open-browse">▦ <span id="t-browse">Browse pets…</span></button>
-              <button class="ghost-btn" id="open-create">✎ <span id="t-create">Create pet…</span></button>
+              <button class="small-btn" id="open-browse">▦ <span id="t-browse">Browse pets…</span></button>
+              <button class="small-btn" id="open-create">✎ <span id="t-create">Create pet…</span></button>
             </div>
           </div>
         </div>
 
         <div class="group">
           <div class="ghead" id="t-anims">Animations</div>
-          <div class="gcard" id="anim-rows"></div>
+          <div class="gcard pad">
+            <span class="seg seg-full" id="anim-mood">
+              <button data-v="idle" id="am-idle">Idle</button>
+              <button data-v="working" class="sel" id="am-working">Working</button>
+              <button data-v="waiting" id="am-waiting">Waiting</button>
+              <button data-v="done" id="am-done">Done</button>
+              <button data-v="celebrate" id="am-celebrate">Celebrate</button>
+            </span>
+            <div class="cap" id="t-anim-hint" style="margin: 8px 0 6px">Hover a clip to preview it.</div>
+            <div id="anim-grid" class="anim-grid"></div>
+          </div>
         </div>
 
         <div class="group">
@@ -188,12 +187,6 @@
               </span></div>
             <div class="row"><span id="t-opacity">Opacity</span>
               <span class="slider-wrap"><input type="range" id="opacity" min="60" max="100" /><span class="val dim" id="opacity-val"></span></span></div>
-            <div class="row"><span id="t-font">Font</span>
-              <select id="font-family">
-                <option value="system" id="o-system">System</option>
-                <option value="rounded" id="o-rounded">Rounded</option>
-                <option value="mono" id="o-mono">Monospace</option>
-              </select></div>
             <label class="row"><span class="rt"><span id="t-idle">Show idle message</span>
               <span class="cap" id="t-idle-sub">The pet's chatter while no agent is running.</span></span>
               <input type="checkbox" id="idle" /></label>
