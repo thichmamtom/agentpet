@@ -93,15 +93,17 @@ function chime(event: "done" | "waiting") {
 
 // --- pick + load a pet sprite -------------------------------------------------
 (async () => {
-  const custom = localStorage.getItem("ap_pet_custom");
-  if (custom) { pet.load(custom); return; } // user's own spritesheet
-  // Keep retrying , the app may have launched before the network was up.
+  // Library selection (Browse/Create) wins; legacy ap_pet_custom still honoured.
+  const url = localStorage.getItem("ap_pet_custom") || localStorage.getItem("ap_pet_url");
+  if (url) { pet.load(url); return; }
+  // First run: no selection yet , pick a starter from the catalog.
   for (;;) {
     const pets = await loadCatalog();
     if (pets.length) {
       const slug = savedSlug();
       const chosen = pets.find((p) => p.slug === slug) ?? pets[Math.floor(pets.length / 2)];
       saveSlug(chosen.slug);
+      localStorage.setItem("ap_pet_url", chosen.spritesheetUrl);
       pet.load(chosen.spritesheetUrl);
       return;
     }
@@ -246,6 +248,7 @@ listen("sessions-request", () => {
 listen<{ slug: string; url: string }>("set-pet", (e) => {
   pet.load(e.payload.url);
   saveSlug(e.payload.slug);
+  localStorage.setItem("ap_pet_url", e.payload.url);
 });
 // Language changed from Settings , re-render the bubble in the new language.
 listen<Lang>("lang-changed", (e) => { setLang(e.payload); render(); });

@@ -239,8 +239,8 @@ export function initDemo() {
       if (!pet) {
         pet = new Pet(stageCanvas);
         bubble = new BubbleRenderer(stageBubble);
-        const custom = localStorage.getItem("ap_pet_custom");
-        if (custom) pet.load(custom);
+        const url = localStorage.getItem("ap_pet_custom") || localStorage.getItem("ap_pet_url");
+        if (url) pet.load(url);
         else {
           const pets = await loadCatalog();
           const chosen = pets.find((p) => p.slug === savedSlug()) ?? pets[0];

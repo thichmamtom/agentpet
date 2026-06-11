@@ -3,7 +3,7 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import { exit } from "@tauri-apps/plugin-process";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
-import { loadCatalog, savedSlug, saveSlug, type Pet } from "./catalog";
+import { loadCatalog, savedSlug, saveSlug, getLibrary, addToLibrary, removeFromLibrary, type Pet, type LibPet } from "./catalog";
 import { t, getLang, setLang, type Lang } from "./i18n";
 import { SessionStore, basename, type AgentEventPayload, type Session } from "./state";
 import { agentIconUrl } from "./icons";
@@ -160,44 +160,44 @@ function initSessions() {
 }
 
 // ------------------------------------------------------------------ pet ----
+// macOS model: the pager shows your INSTALLED pets (library); the full catalog
+// lives in the Browse dialog where "Get" adds a pet to the library.
 const current = document.getElementById("pet-current") as HTMLDivElement;
 const search = document.getElementById("pet-search") as HTMLInputElement;
-const random = document.getElementById("pet-random") as HTMLButtonElement;
 const results = document.getElementById("pet-results") as HTMLDivElement;
 
 let catalog: Pet[] = [];
-let currentPet: Pet | undefined;
 
-async function pick(p: Pet) {
+function selectedPet(): LibPet | undefined {
+  const slug = savedSlug();
+  return getLibrary().find((p) => p.slug === slug) ?? getLibrary()[0];
+}
+
+async function pick(p: LibPet) {
   saveSlug(p.slug);
-  localStorage.removeItem("ap_pet_custom"); // back to a catalog pet
-  await emit("set-pet", { slug: p.slug, url: p.spritesheetUrl });
-  currentPet = p;
+  localStorage.setItem("ap_pet_url", p.url);
+  localStorage.removeItem("ap_pet_custom"); // legacy key
+  await emit("set-pet", { slug: p.slug, url: p.url });
   showCurrent();
-  results.querySelectorAll(".pet-item.sel").forEach((el) => el.classList.remove("sel"));
-  results.querySelector(`.pet-item[data-slug="${CSS.escape(p.slug)}"]`)?.classList.add("sel");
+  renderPage();
 }
 
 function showCurrent() {
-  if (!catalog.length) { current.textContent = t("Couldn't load pets , check your internet connection."); return; }
-  current.textContent = localStorage.getItem("ap_pet_custom")
-    ? (localStorage.getItem("ap_pet_custom_name") || t("(your image)"))
-    : currentPet ? currentPet.name : t("(default)");
+  const sel = selectedPet();
+  current.textContent = sel ? sel.name : t("No pet selected");
   const hero = document.getElementById("hero-thumb") as HTMLCanvasElement;
-  const url = localStorage.getItem("ap_pet_custom") || currentPet?.spritesheetUrl;
-  if (url) drawThumb(hero, url);
-  loadHeroDescription();
+  if (sel) drawThumb(hero, sel.url);
+  loadHeroDescription(sel);
 }
 
 // The pet's own description (from its pet.json on the CDN), like the macOS
 // hero card; falls back to the generic caption.
-async function loadHeroDescription() {
+async function loadHeroDescription(sel: LibPet | undefined) {
   const el = document.getElementById("hero-desc");
   if (!el) return;
-  const jsonUrl = !localStorage.getItem("ap_pet_custom") && currentPet?.petJsonUrl;
-  if (!jsonUrl) { el.textContent = t("Pick the companion that floats on your desktop."); return; }
+  if (!sel?.petJsonUrl) { el.textContent = t("Pick the companion that floats on your desktop."); return; }
   try {
-    const j: any = await (await fetch(jsonUrl)).json();
+    const j: any = await (await fetch(sel.petJsonUrl)).json();
     const desc = (j.description || j.about || "").toString().trim();
     el.textContent = desc || t("Pick the companion that floats on your desktop.");
   } catch {
@@ -205,23 +205,25 @@ async function loadHeroDescription() {
   }
 }
 
-// Pet pager , 8 pets per page (4 × 2) with ‹ › nav, like the macOS PetPager.
-// Dots when few pages (e.g. a narrowed search), a counter otherwise.
+// Pet pager , 8 per page (4 × 2) over the LIBRARY, hover ✕ to remove.
 const PER_PAGE = 8;
-let view: Pet[] = [];
 let page = 0;
 
 const pgPrev = document.getElementById("pg-prev") as HTMLButtonElement;
 const pgNext = document.getElementById("pg-next") as HTMLButtonElement;
 const pgInd = document.getElementById("pg-ind") as HTMLElement;
 
-function setView(list: Pet[]) {
-  view = list;
-  page = 0;
-  renderPage();
+function libraryView(): LibPet[] {
+  const q = search.value.trim().toLowerCase();
+  const lib = getLibrary();
+  return q ? lib.filter((p) => p.name.toLowerCase().includes(q)) : lib;
 }
 
 function renderPage() {
+  const lib = getLibrary();
+  search.style.display = lib.length > 4 ? "" : "none"; // mac shows search only when >4
+  (document.getElementById("lib-empty") as HTMLElement).hidden = lib.length > 0;
+  const view = libraryView();
   const totalPages = Math.max(1, Math.ceil(view.length / PER_PAGE));
   if (page >= totalPages) page = totalPages - 1;
   results.innerHTML = "";
@@ -232,14 +234,31 @@ function renderPage() {
     if (p.slug === savedSlug()) item.classList.add("sel");
     const cv = document.createElement("canvas");
     cv.width = 48; cv.height = 48; cv.className = "pet-thumb";
-    drawThumb(cv, p.spritesheetUrl);
+    drawThumb(cv, p.url);
     const label = document.createElement("span");
     label.textContent = p.name;
+    const del = document.createElement("span");
+    del.className = "pet-del";
+    del.textContent = "✕";
+    del.title = t("Remove");
+    del.onclick = (ev) => {
+      ev.stopPropagation();
+      removeFromLibrary(p.slug);
+      if (p.slug === savedSlug()) {
+        const next = getLibrary()[0];
+        if (next) void pick(next);
+      }
+      showCurrent();
+      renderPage();
+    };
+    item.appendChild(del);
     item.appendChild(cv);
     item.appendChild(label);
     item.onclick = () => pick(p);
     results.appendChild(item);
   }
+  const pager = document.getElementById("pet-pager") as HTMLElement;
+  pager.style.display = view.length > PER_PAGE ? "" : "none";
   pgPrev.disabled = page === 0;
   pgNext.disabled = page >= totalPages - 1;
   pgInd.innerHTML = "";
@@ -266,8 +285,8 @@ function drawThumb(cv: HTMLCanvasElement, url: string) {
   img.onload = () => {
     const fw = img.naturalWidth / 8, fh = img.naturalHeight / 9;
     if (!fw || !fh) return;
-    const s = Math.min(cv.width / fw, cv.height / fh);
-    const dw = fw * s, dh = fh * s;
+    const sc = Math.min(cv.width / fw, cv.height / fh);
+    const dw = fw * sc, dh = fh * sc;
     ctx.clearRect(0, 0, cv.width, cv.height);
     ctx.drawImage(img, 0, 0, fw, fh, (cv.width - dw) / 2, (cv.height - dh) / 2, dw, dh);
   };
@@ -275,23 +294,211 @@ function drawThumb(cv: HTMLCanvasElement, url: string) {
 }
 
 async function initPet() {
-  // Keep retrying , the app may have launched before the network was up.
+  search.addEventListener("input", () => { page = 0; renderPage(); });
+  renderPage();
+  showCurrent();
+  initBrowse();
+  initCreate();
+  // Seed the library on first run: the currently shown pet (or the catalog
+  // default) becomes the first installed pet, so the pager is never empty.
   for (;;) {
     catalog = await loadCatalog();
     if (catalog.length) break;
-    showCurrent(); // "couldn't load" hint while we wait
+    current.textContent = t("Couldn't load pets , check your internet connection.");
     await new Promise((r) => setTimeout(r, 15000));
   }
-  currentPet = catalog.find((p) => p.slug === savedSlug());
+  if (!getLibrary().length) {
+    const slug = savedSlug();
+    const c = catalog.find((p) => p.slug === slug) ?? catalog[Math.floor(catalog.length / 2)];
+    if (c) addToLibrary({ slug: c.slug, name: c.name, url: c.spritesheetUrl, petJsonUrl: c.petJsonUrl });
+  }
+  renderPage();
   showCurrent();
-  setView(catalog);
-  search.addEventListener("input", () => {
-    const q = search.value.trim().toLowerCase();
-    setView(q ? catalog.filter((p) => p.name.toLowerCase().includes(q)) : catalog);
+}
+
+// -------------------------------------------------------------- browse ----
+// The macOS BrowsePetsView: community pets first, Petdex shuffled, category
+// segmented filter, search, Get/Added per row, lazy thumbnails.
+interface RemotePet { slug: string; name: string; url: string; petJsonUrl?: string; kind: string; author: string; community: boolean }
+let browseAll: RemotePet[] = [];
+let bwCat = "all";
+let bwShown = 0;
+const BW_CHUNK = 60;
+
+function initBrowse() {
+  const modal = document.getElementById("browse-modal") as HTMLElement;
+  const list = document.getElementById("bw-list") as HTMLElement;
+  const status = document.getElementById("bw-status") as HTMLElement;
+  const searchEl = document.getElementById("bw-search") as HTMLInputElement;
+
+  (document.getElementById("open-browse") as HTMLButtonElement).onclick = async () => {
+    modal.hidden = false;
+    if (!browseAll.length) {
+      status.style.display = "";
+      status.textContent = t("Loading pets…");
+      browseAll = await loadBrowseSources();
+      if (!browseAll.length) {
+        status.textContent = t("Couldn't load the pet library. Check your connection.");
+        return;
+      }
+    }
+    status.style.display = "none";
+    repaint();
+  };
+  (document.getElementById("browse-done") as HTMLButtonElement).onclick = () => { modal.hidden = true; renderPage(); showCurrent(); };
+
+  document.querySelectorAll<HTMLButtonElement>("#bw-cat button").forEach((b) => {
+    b.onclick = () => {
+      bwCat = b.dataset.v!;
+      document.querySelectorAll("#bw-cat button").forEach((x) => x.classList.toggle("sel", x === b));
+      repaint();
+    };
   });
-  random.addEventListener("click", () => {
-    if (catalog.length) pick(catalog[Math.floor(Math.random() * catalog.length)]);
+  searchEl.addEventListener("input", () => repaint());
+
+  const thumbIO = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      const cv = e.target as HTMLCanvasElement;
+      thumbIO.unobserve(cv);
+      drawThumb(cv, cv.dataset.url!);
+    }
+  }, { root: list, rootMargin: "200px" });
+
+  function filtered(): RemotePet[] {
+    let v = browseAll;
+    if (bwCat !== "all") v = v.filter((p) => p.kind === bwCat);
+    const q = searchEl.value.trim().toLowerCase();
+    if (q) v = v.filter((p) => p.name.toLowerCase().includes(q) || p.slug.includes(q));
+    return v;
+  }
+
+  function repaint() {
+    list.innerHTML = "";
+    bwShown = 0;
+    appendChunk();
+  }
+
+  function appendChunk() {
+    const v = filtered();
+    const installed = new Set(getLibrary().map((p) => p.slug));
+    for (const p of v.slice(bwShown, bwShown + BW_CHUNK)) {
+      const row = document.createElement("div");
+      row.className = "bw-row";
+      const cv = document.createElement("canvas");
+      cv.width = 44; cv.height = 48; cv.className = "bw-thumb";
+      cv.dataset.url = p.url;
+      thumbIO.observe(cv);
+      const meta = document.createElement("div");
+      meta.className = "bw-meta";
+      meta.innerHTML = `<span class="bw-name">${esc(p.name)}${p.community ? ` <span class="bw-badge">${t("Community")}</span>` : ""}</span>` +
+        `<span class="cap">${t("by")} ${esc(p.author)}</span>`;
+      const btn = document.createElement("button");
+      if (installed.has(p.slug)) {
+        btn.className = "bw-added";
+        btn.textContent = `✓ ${t("Added")}`;
+        btn.disabled = true;
+      } else {
+        btn.className = "mini";
+        btn.textContent = t("Get");
+        btn.onclick = () => {
+          addToLibrary({ slug: p.slug, name: p.name, url: p.url, petJsonUrl: p.petJsonUrl });
+          void pick({ slug: p.slug, name: p.name, url: p.url, petJsonUrl: p.petJsonUrl });
+          btn.className = "bw-added";
+          btn.textContent = `✓ ${t("Added")}`;
+          btn.disabled = true;
+        };
+      }
+      row.appendChild(cv);
+      row.appendChild(meta);
+      row.appendChild(btn);
+      list.appendChild(row);
+    }
+    bwShown = Math.min(bwShown + BW_CHUNK, v.length);
+  }
+
+  list.addEventListener("scroll", () => {
+    if (list.scrollTop + list.clientHeight > list.scrollHeight - 300) appendChunk();
   });
+}
+
+/// Community manifest first, Petdex library shuffled after, deduped by slug.
+async function loadBrowseSources(): Promise<RemotePet[]> {
+  const norm = (p: any, community: boolean): RemotePet | null => {
+    if (!p?.slug || !p?.spritesheetUrl) return null;
+    const author = (p.submittedBy || "").trim() || "community";
+    return { slug: p.slug, name: p.displayName ?? p.slug, url: p.spritesheetUrl,
+      petJsonUrl: p.petJsonUrl, kind: p.kind ?? "creature", author, community };
+  };
+  const fetchList = async (url: string, community: boolean): Promise<RemotePet[]> => {
+    try {
+      const j: any = await (await fetch(url)).json();
+      return (j.pets ?? []).map((p: any) => norm(p, community)).filter(Boolean);
+    } catch { return []; }
+  };
+  const [community, library] = await Promise.all([
+    fetchList("https://agentpet.thenightwatcher.online/api/pets", true),
+    fetchList("https://pets.thenightwatcher.online/manifest.json", false),
+  ]);
+  for (let i = library.length - 1; i > 0; i--) { // shuffle like macOS
+    const j = Math.floor(Math.random() * (i + 1));
+    [library[i], library[j]] = [library[j], library[i]];
+  }
+  const seen = new Set<string>();
+  return [...community, ...library].filter((p) => seen.has(p.slug) ? false : (seen.add(p.slug), true));
+}
+
+// -------------------------------------------------------------- create ----
+function initCreate() {
+  const modal = document.getElementById("create-modal") as HTMLElement;
+  const name = document.getElementById("cr-name") as HTMLInputElement;
+  const desc = document.getElementById("cr-desc") as HTMLInputElement;
+  const fileName = document.getElementById("cr-file-name") as HTMLElement;
+  const err = document.getElementById("cr-error") as HTMLElement;
+  const createBtn = document.getElementById("cr-create") as HTMLButtonElement;
+  let dataUrl = "";
+
+  const filePick = document.createElement("input");
+  filePick.type = "file";
+  filePick.accept = "image/png,image/webp,image/*";
+  filePick.style.display = "none";
+  document.body.appendChild(filePick);
+
+  const sync = () => { createBtn.disabled = !(name.value.trim() && dataUrl); };
+  name.addEventListener("input", sync);
+
+  (document.getElementById("open-create") as HTMLButtonElement).onclick = () => {
+    modal.hidden = false;
+    name.value = ""; desc.value = ""; dataUrl = "";
+    fileName.textContent = t("No image selected");
+    err.hidden = true;
+    sync();
+  };
+  (document.getElementById("create-cancel") as HTMLButtonElement).onclick = () => { modal.hidden = true; };
+  (document.getElementById("cr-choose") as HTMLButtonElement).onclick = () => {
+    filePick.onchange = () => {
+      const f = filePick.files?.[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => { dataUrl = String(reader.result); fileName.textContent = f.name; err.hidden = true; sync(); };
+        img.onerror = () => { err.textContent = t("Could not create this pet. Check that the image is a valid spritesheet."); err.hidden = false; };
+        img.src = String(reader.result);
+      };
+      reader.readAsDataURL(f);
+      filePick.value = "";
+    };
+    filePick.click();
+  };
+  createBtn.onclick = () => {
+    const slug = `local-${Date.now()}`;
+    addToLibrary({ slug, name: name.value.trim(), url: dataUrl, custom: true });
+    void pick({ slug, name: name.value.trim(), url: dataUrl, custom: true });
+    modal.hidden = true;
+    renderPage();
+    showCurrent();
+  };
 }
 
 // ---------------------------------------------------------------- bubble ----
@@ -384,9 +591,33 @@ function initBubbleDisplay() {
     el.onchange = () => { localStorage.setItem(key, el.value); changed(); paintPreview(); };
   };
   bind("bub-filter", "ap_bub_filter", "all");
+
+  // Detail captions + conditional rows, mirroring the macOS pickers.
+  const MODE_DETAIL: Record<string, string> = {
+    list: "Show every row at once, up to the max below.",
+    carousel: "One row at a time. Auto-cycles every 3 s.",
+    compact: "Summary header, first two rows, then fold the rest.",
+  };
+  const GROUP_DETAIL: Record<string, string> = {
+    byKind: "One row per agent kind (×N when multiple)",
+    all: "One row per session",
+  };
+  const syncDisplay = () => {
+    const mode = localStorage.getItem("ap_bub_mode") || "carousel";
+    const grouping = localStorage.getItem("ap_bub_grouping") || "byKind";
+    (document.getElementById("bub-mode-detail") as HTMLElement).textContent = t(MODE_DETAIL[mode] ?? "");
+    (document.getElementById("bub-grouping-detail") as HTMLElement).textContent = t(GROUP_DETAIL[grouping] ?? "");
+    (document.getElementById("maxrows-row") as HTMLElement).style.display = mode === "carousel" ? "none" : "";
+    (document.getElementById("sortkind-row") as HTMLElement).style.display = grouping === "all" ? "" : "none";
+  };
+  syncDisplay();
+  const sortkind = document.getElementById("bub-sortkind") as HTMLInputElement;
+  sortkind.checked = localStorage.getItem("ap_bub_sortkind") === "1";
+  sortkind.onchange = () => { localStorage.setItem("ap_bub_sortkind", sortkind.checked ? "1" : "0"); changed(); };
+
   // Segmented controls (mode/grouping/sep/dot) save via initSegs; repaint the
-  // preview row when one changes.
-  document.addEventListener("seg-changed", () => paintPreview());
+  // preview row + captions when one changes.
+  document.addEventListener("seg-changed", () => { paintPreview(); syncDisplay(); });
 
   const max = document.getElementById("bub-max") as HTMLInputElement;
   max.value = localStorage.getItem("ap_bub_max") || "5";
@@ -494,28 +725,87 @@ function initPetControls() {
   fx.checked = localStorage.getItem("ap_fx") === "1"; // mac default: pet stands still
   fx.onchange = () => { localStorage.setItem("ap_fx", fx.checked ? "1" : "0"); changed(); };
 
-  // Import a local spritesheet (stored as a data URL , no extra plugins).
-  const btn = document.getElementById("import-pet") as HTMLButtonElement;
-  const file = document.createElement("input");
-  file.type = "file";
-  file.accept = "image/png,image/webp,image/*";
-  file.style.display = "none";
-  document.body.appendChild(file);
-  btn.onclick = () => file.click();
-  file.onchange = () => {
-    const f = file.files?.[0];
-    if (!f) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const url = String(reader.result);
-      localStorage.setItem("ap_pet_custom", url);
-      localStorage.setItem("ap_pet_custom_name", f.name.replace(/\.[^.]+$/, ""));
-      emit("set-pet", { slug: "local", url });
-      current.textContent = localStorage.getItem("ap_pet_custom_name") || t("(your image)");
-      drawThumb(document.getElementById("hero-thumb") as HTMLCanvasElement, url);
-    };
-    reader.readAsDataURL(f);
+}
+
+// ------------------------------------------------------------- agent icons ----
+// Per-agent icon override (mac BubbleSettings.iconChoices): brand logo of any
+// agent, or a symbol. Stored as ap_icon_<kind> = "brand:<kind>" | "emoji:<char>".
+const ICON_SYMBOLS = ["🤖","⚡","🔥","🚀","🌟","💻","🛠","🧠","👾","🐙","🦾","🧪","📦","🎯","🪄","🐚","🌀","🫧"];
+
+export function iconChoiceLabel(kind: string): { type: "brand"; kind: string } | { type: "emoji"; v: string } {
+  const raw = localStorage.getItem(`ap_icon_${kind}`);
+  if (raw?.startsWith("emoji:")) return { type: "emoji", v: raw.slice(6) };
+  if (raw?.startsWith("brand:")) return { type: "brand", kind: raw.slice(6) };
+  return { type: "brand", kind };
+}
+
+function iconCellHtml(kind: string): string {
+  const c = iconChoiceLabel(kind);
+  if (c.type === "emoji") return `<span class="ic-emoji">${c.v}</span>`;
+  const url = agentIconUrl(c.kind);
+  return url ? `<img class="aicon" src="${url}">` : "";
+}
+
+function initAgentIcons() {
+  const root = document.getElementById("agent-icons")!;
+  const modal = document.getElementById("icon-modal") as HTMLElement;
+  const brands = document.getElementById("ic-brands") as HTMLElement;
+  const symbols = document.getElementById("ic-symbols") as HTMLElement;
+  let editing = "claude";
+
+  const paintRows = () => {
+    root.innerHTML = "";
+    for (const [kind, name] of MSG_AGENTS.slice(1)) {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = `<span class="ic-cur">${iconCellHtml(kind)} ${esc(name)}</span>`;
+      const btn = document.createElement("button");
+      btn.className = "mini";
+      btn.textContent = t("Change…");
+      btn.onclick = () => { editing = kind; openPicker(name); };
+      row.appendChild(btn);
+      root.appendChild(row);
+    }
   };
+
+  const paintPicker = () => {
+    const cur = localStorage.getItem(`ap_icon_${editing}`) ?? `brand:${editing}`;
+    brands.innerHTML = "";
+    for (const [kind] of MSG_AGENTS.slice(1)) {
+      const url = agentIconUrl(kind);
+      if (!url) continue;
+      const cell = document.createElement("button");
+      cell.className = "icon-cell" + (cur === `brand:${kind}` ? " sel" : "");
+      cell.innerHTML = `<img class="aicon" src="${url}">`;
+      cell.onclick = () => { localStorage.setItem(`ap_icon_${editing}`, `brand:${kind}`); finish(); };
+      brands.appendChild(cell);
+    }
+    symbols.innerHTML = "";
+    for (const sym of ICON_SYMBOLS) {
+      const cell = document.createElement("button");
+      cell.className = "icon-cell" + (cur === `emoji:${sym}` ? " sel" : "");
+      cell.textContent = sym;
+      cell.onclick = () => { localStorage.setItem(`ap_icon_${editing}`, `emoji:${sym}`); finish(); };
+      symbols.appendChild(cell);
+    }
+  };
+
+  const openPicker = (name: string) => {
+    (document.getElementById("icon-modal-title") as HTMLElement).textContent = `${t("Icon for")} ${name}`;
+    paintPicker();
+    modal.hidden = false;
+  };
+  const finish = () => {
+    modal.hidden = true;
+    paintRows();
+    emit("bubble-changed", null);
+  };
+  (document.getElementById("icon-done") as HTMLButtonElement).onclick = () => { modal.hidden = true; };
+  (document.getElementById("icon-reset") as HTMLButtonElement).onclick = () => {
+    localStorage.removeItem(`ap_icon_${editing}`);
+    finish();
+  };
+  paintRows();
 }
 
 // ------------------------------------------------------------ animations ----
@@ -677,7 +967,23 @@ function applyStatic() {
   // pet
   set("t-pet-sub", "Pick the companion that floats on your desktop.");
   set("t-choose", "Choose pet");
-  set("import-pet", "Use my own spritesheet…");
+  set("t-lib-empty", "No pets yet. Tap Browse to add one.");
+  set("t-browse", "Browse pets…");
+  set("t-create", "Create pet…");
+  set("t-bw-title", "Browse pets");
+  set("browse-done", "Done");
+  set("t-bw-all", "All");
+  set("t-bw-char", "Characters");
+  set("t-bw-crea", "Creatures");
+  set("t-bw-obj", "Objects");
+  set("t-cr-title", "Create pet");
+  set("create-cancel", "Cancel");
+  set("t-cr-name", "Name");
+  set("t-cr-desc", "Description");
+  set("t-cr-sheet", "Spritesheet");
+  set("t-cr-hint", "Use the same 8×9 transparent spritesheet format as downloaded pets.");
+  set("cr-create", "Create");
+  set("cr-choose", "Choose image…");
   set("t-size", "Size on screen");
   set("t-anims", "Animations");
   set("t-petsize", "Pet size");
@@ -716,6 +1022,12 @@ function applyStatic() {
   set("t-pr-original", "Original");
   set("t-pr-standard", "Standard");
   set("t-pr-detailed", "Detailed");
+  set("t-agenticons", "Agent icons");
+  set("t-sortkind", "Sort by agent kind");
+  set("t-ic-brand", "Brand logos");
+  set("t-ic-sym", "Symbols");
+  set("icon-reset", "Reset to default");
+  set("icon-done", "Done");
   set("t-style", "Style");
   set("t-separator", "Separator");
   set("o-sep-space", "space");
@@ -766,7 +1078,8 @@ function applyStatic() {
   set("t-multi-sub", "Structured rows with icons, state dots, and activity messages.");
   set("t-thanks", "If AgentPet helps your workflow, a star means a lot. Thank you!");
   set("t-fontsize", "Font size");
-  search.placeholder = t("Search pets by name...");
+  search.placeholder = t("Search your pets");
+  (document.getElementById("bw-search") as HTMLInputElement).placeholder = t("Search pets");
 }
 
 // ------------------------------------------------- version / quit / links ----
@@ -827,6 +1140,7 @@ initPet();
 initPetControls();
 initBubble();
 initBubbleDisplay();
+initAgentIcons();
 initAnimations();
 initSounds();
 initSessions();

@@ -486,10 +486,9 @@ export class BubbleRenderer {
           break;
         }
         case "icon": {
-          const img = document.createElement("img");
-          img.className = "aicon";
-          img.alt = "";
-          el.appendChild(img);
+          const slot = document.createElement("span");
+          slot.className = "icon-slot";
+          el.appendChild(slot);
           break;
         }
         case "title": {
@@ -548,16 +547,21 @@ export class BubbleRenderer {
     const dot = el.querySelector<HTMLElement>(".sdot");
     if (dot) dot.classList.toggle("spin", s.state !== "idle");
 
-    const icon = el.querySelector<HTMLImageElement>(".aicon");
-    if (icon) {
-      const url = agentIconUrl(s.agent);
-      if (url && icon.dataset.kind !== s.agent) {
-        icon.src = url;
-        icon.dataset.kind = s.agent;
-        icon.style.display = "";
-        icon.title = agentLabel(s.agent);
-      } else if (!url) {
-        icon.style.display = "none";
+    const slot = el.querySelector<HTMLElement>(".icon-slot");
+    if (slot) {
+      // Per-agent icon override (Settings → Agent icons): brand logo or symbol.
+      const choice = localStorage.getItem(`ap_icon_${s.agent}`) ?? `brand:${s.agent}`;
+      if (slot.dataset.choice !== choice) {
+        slot.dataset.choice = choice;
+        slot.title = agentLabel(s.agent);
+        if (choice.startsWith("emoji:")) {
+          slot.textContent = choice.slice(6);
+          slot.className = "icon-slot emoji";
+        } else {
+          const url = agentIconUrl(choice.slice(6));
+          slot.className = "icon-slot";
+          slot.innerHTML = url ? `<img class="aicon" src="${url}" alt="">` : "";
+        }
       }
     }
 
