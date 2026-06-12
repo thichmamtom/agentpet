@@ -84,7 +84,16 @@ enum SpriteSlicer {
                 for col in segments(colHas) {
                     let rect = CGRect(x: col.lower, y: row.lower,
                                       width: col.upper - col.lower, height: row.upper - row.lower)
-                    if let cropped = image.cropping(to: rect) { clip.append(cropped) }
+                    guard let cropped = image.cropping(to: rect) else { continue }
+                    let fw = Int(rect.width), fh = Int(rect.height)
+                    let space = CGColorSpaceCreateDeviceRGB()
+                    let info = CGImageAlphaInfo.premultipliedLast.rawValue
+                    guard let ctx = CGContext(data: nil, width: fw, height: fh,
+                                             bitsPerComponent: 8, bytesPerRow: fw * 4,
+                                             space: space, bitmapInfo: info) else { continue }
+                    ctx.draw(cropped, in: CGRect(origin: .zero, size: CGSize(width: fw, height: fh)))
+                    guard let frame = ctx.makeImage() else { continue }
+                    clip.append(frame)
                 }
                 if !clip.isEmpty { clips.append(clip) }
             }
