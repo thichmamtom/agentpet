@@ -77,15 +77,18 @@ final class CareSyncController: ObservableObject {
         }
     }
 
-    /// First idle frame as a small PNG data URL, so the web profile can show
-    /// the actual sprite — including local custom pets the site has never seen.
+    /// First idle frame as a PNG data URL, so the web profile can show the
+    /// actual sprite — including local custom pets the site has never seen.
+    /// Rendered at a generous size with nearest-neighbour scaling so the pixel
+    /// art stays crisp when the web shrinks it.
     private static func thumbDataURL(for petID: String) -> String? {
         guard let frame = ImagePetStore.shared.pack(id: petID)?.clip(0).first else { return nil }
         let size = frame.size
         guard size.width > 0, size.height > 0 else { return nil }
-        let maxSide: CGFloat = 64
-        let scale = min(maxSide / size.width, maxSide / size.height)
-        let target = NSSize(width: max(1, floor(size.width * scale)), height: max(1, floor(size.height * scale)))
+        // Integer upscale to ~128px so the sprite is sharp at any display size.
+        let maxSide: CGFloat = 128
+        let scale = max(1, floor(min(maxSide / size.width, maxSide / size.height)))
+        let target = NSSize(width: size.width * scale, height: size.height * scale)
         guard let rep = NSBitmapImageRep(
             bitmapDataPlanes: nil, pixelsWide: Int(target.width), pixelsHigh: Int(target.height),
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
@@ -97,7 +100,7 @@ final class CareSyncController: ObservableObject {
         ctx?.imageInterpolation = .none   // keep the pixel art crisp
         frame.draw(in: NSRect(origin: .zero, size: target))
         NSGraphicsContext.restoreGraphicsState()
-        guard let png = rep.representation(using: .png, properties: [:]), png.count < 24_000 else { return nil }
+        guard let png = rep.representation(using: .png, properties: [:]), png.count < 48_000 else { return nil }
         return "data:image/png;base64," + png.base64EncodedString()
     }
 
@@ -108,6 +111,7 @@ final class CareSyncController: ObservableObject {
 
         let pets: [[String: Any]] = states.map { id, s in
             let name = ImagePetStore.shared.pack(id: id)?.displayName ?? id
+            let week = PetCare.recentDays(state: s, now: Date()).map { $0.tokens }
             return [
                 "id": id,
                 "name": name,
@@ -117,6 +121,7 @@ final class CareSyncController: ObservableObject {
                 "streak": s.streakDays,
                 "lastFedAt": s.lastFedAt.map { Int($0.timeIntervalSince1970) } as Any,
                 "thumb": Self.thumbDataURL(for: id) as Any,
+                "week": week,
             ]
         }
 

@@ -38,16 +38,21 @@ export const POST: APIRoute = async ({ request }) => {
   const int = (x: any) => Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, Math.floor(Number(x) || 0)));
   const thumbOf = (p: any): string | null => {
     const t = p?.thumb;
-    if (typeof t !== "string" || t.length > 32_000) return null;
+    if (typeof t !== "string" || t.length > 70_000) return null;
     return t.startsWith("data:image/png;base64,") ? t : null;
+  };
+  const weekOf = (p: any): string | null => {
+    if (!Array.isArray(p?.week)) return null;
+    const nums = p.week.slice(0, 7).map((n: any) => Math.max(0, Math.floor(Number(n) || 0)));
+    return JSON.stringify(nums);
   };
   const statements = pets
     .filter((p) => typeof p?.id === "string" && p.id.length > 0 && p.id.length <= 120)
     .map((p) =>
       db
         .prepare(
-          `INSERT INTO care_pets (user_id, pet_id, name, xp, tokens, meals, streak, last_fed_at, updated_at, thumb)
-           VALUES (?,?,?,?,?,?,?,?,?,?)
+          `INSERT INTO care_pets (user_id, pet_id, name, xp, tokens, meals, streak, last_fed_at, updated_at, thumb, week)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT (user_id, pet_id) DO UPDATE SET
              name=excluded.name,
              xp=MAX(care_pets.xp, excluded.xp),
@@ -56,7 +61,8 @@ export const POST: APIRoute = async ({ request }) => {
              streak=excluded.streak,
              last_fed_at=excluded.last_fed_at,
              updated_at=excluded.updated_at,
-             thumb=COALESCE(excluded.thumb, care_pets.thumb)`
+             thumb=COALESCE(excluded.thumb, care_pets.thumb),
+             week=COALESCE(excluded.week, care_pets.week)`
         )
         .bind(
           device.user_id,
@@ -68,7 +74,8 @@ export const POST: APIRoute = async ({ request }) => {
           int(p.streak),
           p.lastFedAt ? int(p.lastFedAt) * 1000 : null,
           now,
-          thumbOf(p)
+          thumbOf(p),
+          weekOf(p)
         )
     );
   if (statements.length) await db.batch(statements);

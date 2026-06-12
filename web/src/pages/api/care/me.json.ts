@@ -21,21 +21,26 @@ export const GET: APIRoute = async ({ cookies }) => {
   await ensureSchema(db);
 
   const rows: any = await db
-    .prepare("SELECT pet_id, name, xp, tokens, meals, streak, last_fed_at, updated_at, thumb FROM care_pets WHERE user_id=? ORDER BY xp DESC")
+    .prepare("SELECT pet_id, name, xp, tokens, meals, streak, last_fed_at, updated_at, thumb, week FROM care_pets WHERE user_id=? ORDER BY xp DESC")
     .bind(user.id)
     .all();
 
-  const pets = (rows?.results ?? []).map((r: any) => ({
-    id: r.pet_id,
-    name: r.name || r.pet_id,
-    xp: r.xp,
-    tokens: r.tokens,
-    meals: r.meals,
-    streak: r.streak,
-    lastFedAt: r.last_fed_at,
-    updatedAt: r.updated_at,
-    thumb: r.thumb || null,
-  }));
+  const pets = (rows?.results ?? []).map((r: any) => {
+    let week: number[] | null = null;
+    try { week = r.week ? JSON.parse(r.week) : null; } catch {}
+    return {
+      id: r.pet_id,
+      name: r.name || r.pet_id,
+      xp: r.xp,
+      tokens: r.tokens,
+      meals: r.meals,
+      streak: r.streak,
+      lastFedAt: r.last_fed_at,
+      updatedAt: r.updated_at,
+      thumb: r.thumb || null,
+      week,
+    };
+  });
 
   return new Response(JSON.stringify({ pets }), {
     headers: { "content-type": "application/json", "cache-control": "no-store" },
