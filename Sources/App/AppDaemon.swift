@@ -86,8 +86,11 @@ final class AppDaemon: ObservableObject {
         Task.detached(priority: .utility) { [weak self] in
             let isQuestion = TranscriptReader.latestAssistantText(at: path)
                 .map(QuestionDetector.looksLikeQuestion) ?? false
+            // The turn just ended either way — feed the pet the tokens it burnt.
+            let tokens = TranscriptReader.newUsageTokens(at: path) ?? 0
             await MainActor.run { [weak self] in
                 guard let self else { return }
+                PetCareController.shared.feedTokens(tokens)
                 if isQuestion {
                     self.store.refineState(id: sessionId, from: .done, to: .waiting, since: stateSince)
                 }
@@ -124,6 +127,7 @@ final class AppDaemon: ObservableObject {
             NotificationManager.shared.notify(
                 title: "\(project) finished", body: "Agent completed its turn")
             SoundSettings.shared.play(.done)
+            PetCareController.shared.recordMeal()
         default:
             break
         }
