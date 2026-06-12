@@ -45,13 +45,8 @@ export const prerender = false;
           <aside class="w-full shrink-0 lg:w-80">
             <div class="card p-6">
               <h3 class="font-display text-lg font-semibold text-ink">Connect the app</h3>
-              <p class="mt-2 text-sm text-muted">In AgentPet open <b class="text-ink">Settings → Care → Web profile</b>, then enter this pairing code.</p>
-              <div id="prof-code-box" class="mt-4 hidden rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3 text-center">
-                <div id="prof-code" class="font-mono text-3xl font-bold tracking-[0.3em] text-brand-700"></div>
-                <div id="prof-code-ttl" class="mt-1 text-xs text-faint"></div>
-              </div>
-              <button id="prof-gen" type="button" class="btn-primary mt-4 w-full"><Icon name="sparkles" class="h-4 w-4" /> <span id="prof-gen-label">Generate pairing code</span></button>
-              <p class="mt-3 text-xs text-faint">Codes are single-use and expire after 10 minutes. Stats refresh automatically while the app runs.</p>
+              <p class="mt-2 text-sm text-muted">In AgentPet open <b class="text-ink">Settings → Care → Web profile</b> and click <b class="text-ink">Sign in with GitHub</b>. The app links itself, no codes to copy.</p>
+              <p class="mt-3 text-xs text-faint">Stats refresh automatically while the app runs.</p>
             </div>
           </aside>
         </div>
@@ -152,33 +147,6 @@ export const prerender = false;
       }
       (window as any).AP_I18N?.apply?.();
     }
-
-    // Pairing code generation + countdown.
-    let ttlTimer: number | undefined;
-    document.getElementById("prof-gen")?.addEventListener("click", async () => {
-      const label = document.getElementById("prof-gen-label")!;
-      label.textContent = "Generating…";
-      const r = await fetch("/api/care/code", { method: "POST" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
-      label.textContent = "Generate a new code";
-      if (!r?.code) return;
-      const box = document.getElementById("prof-code-box")!;
-      box.classList.remove("hidden");
-      document.getElementById("prof-code")!.textContent = r.code;
-      let left = r.expiresInSeconds ?? 600;
-      const ttl = document.getElementById("prof-code-ttl")!;
-      if (ttlTimer) clearInterval(ttlTimer);
-      const tick = () => {
-        if (left <= 0) {
-          ttl.textContent = "Expired, generate a new one.";
-          clearInterval(ttlTimer);
-          return;
-        }
-        ttl.textContent = `Expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
-        left--;
-      };
-      tick();
-      ttlTimer = setInterval(tick, 1000) as unknown as number;
-    });
 
     load();
   </script>
