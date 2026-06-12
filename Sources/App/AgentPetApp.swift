@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         PetWindowController.shared.start()
         AppDaemon.shared.start()
         OpenUsageClient.shared.start()
+        NativeUsageProbe.shared.start()
         CareSyncController.shared.start()
         SettingsModel.shared.migrateInstalledHooksIfNeeded()
         SettingsModel.shared.repairStaleHookPathsIfNeeded()

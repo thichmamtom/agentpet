@@ -140,7 +140,7 @@ enum CareChat {
         default:
             break
         }
-        if OpenUsageClient.shared.limitLow {
+        if OpenUsageClient.shared.limitLow || NativeUsageProbe.shared.limitLow {
             pool += anxious.map { NSLocalizedString($0, comment: "limit anxiety line") }
         }
         return pool

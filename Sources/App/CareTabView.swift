@@ -6,6 +6,7 @@ import AgentPetCore
 struct CareTabView: View {
     @ObservedObject private var care = PetCareController.shared
     @ObservedObject private var usage = OpenUsageClient.shared
+    @ObservedObject private var probe = NativeUsageProbe.shared
     @ObservedObject private var sync = CareSyncController.shared
     @ObservedObject private var pet = PetController.shared
     @ObservedObject private var imagePets = ImagePetStore.shared
@@ -172,9 +173,22 @@ struct CareTabView: View {
                 }
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
+                        Text("Subscription limits")
+                        Text(probe.providers.isEmpty
+                             ? "Read directly from your Claude Code / Codex sign-ins. None found yet."
+                             : "Read directly from your Claude Code / Codex sign-ins.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if !probe.providers.isEmpty {
+                        Text("Active").font(.caption).bold().foregroundStyle(.green)
+                    }
+                }
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(verbatim: "OpenUsage")
                         Text(usage.available
-                             ? "Connected: subscription limits below."
+                             ? "Connected: adds limits for every other provider."
                              : "Optional: install OpenUsage to track every provider's limits.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
@@ -186,22 +200,24 @@ struct CareTabView: View {
                             .controlSize(.small)
                     }
                 }
-                if usage.available {
-                    ForEach(usage.providers) { p in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(verbatim: p.displayName)
-                                if let today = p.todayLabel {
-                                    Text(verbatim: today).font(.caption).foregroundStyle(.secondary)
-                                }
+                ForEach(NativeUsageProbe.combined()) { p in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(verbatim: p.displayName)
+                            if let today = p.todayLabel {
+                                Text(verbatim: today).font(.caption).foregroundStyle(.secondary)
                             }
-                            Spacer()
-                            if let left = p.fractionLeft {
-                                Text(verbatim: "\(Int((left * 100).rounded()))%")
-                                    .font(.caption).bold()
-                                    .foregroundStyle(left < 0.15 ? .red : (left < 0.4 ? .orange : .secondary))
-                                Text("left").font(.caption).foregroundStyle(.secondary)
-                            }
+                        }
+                        Spacer()
+                        if let left = p.fractionLeft {
+                            ProgressView(value: left)
+                                .tint(left < 0.15 ? .red : (left < 0.4 ? .orange : .green))
+                                .controlSize(.small)
+                                .frame(width: 110)
+                            Text(verbatim: "\(Int((left * 100).rounded()))%")
+                                .font(.caption).bold()
+                                .foregroundStyle(left < 0.15 ? .red : (left < 0.4 ? .orange : .secondary))
+                            Text("left").font(.caption).foregroundStyle(.secondary)
                         }
                     }
                 }

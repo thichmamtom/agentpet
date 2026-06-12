@@ -163,13 +163,16 @@ struct PetStatsView: View {
 
     // MARK: - Usage / limits
 
+    @ObservedObject private var probe = NativeUsageProbe.shared
+
     @ViewBuilder private var usageBlock: some View {
-        if usage.available && !usage.providers.isEmpty {
+        let providers = NativeUsageProbe.combined()
+        if !providers.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Limits")
                     .font(.system(size: 9, weight: .semibold)).tracking(0.8)
                     .foregroundStyle(.white.opacity(0.35))
-                ForEach(usage.providers) { p in
+                ForEach(providers) { p in
                     HStack(spacing: 8) {
                         Text(verbatim: p.displayName)
                             .font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.85))
