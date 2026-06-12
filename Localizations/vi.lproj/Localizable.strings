@@ -322,3 +322,12 @@
 "Sync failed, will retry." = "Đồng bộ thất bại, sẽ thử lại.";
 "Today %@ tokens · %d meals" = "Hôm nay %@ token · %d bữa";
 "Today %@ tokens · 1 meal" = "Hôm nay %@ token · 1 bữa";
+
+/* Care v3: GitHub link + stats popover */
+"Connected as %@" = "Đã kết nối với %@";
+"Your browser opens GitHub sign-in; the app links automatically." = "Trình duyệt sẽ mở đăng nhập GitHub; app tự liên kết.";
+"Sign in with GitHub" = "Đăng nhập bằng GitHub";
+"Last fed" = "Ăn lần cuối";
+"%@ tokens · 1 meal" = "%@ token · 1 bữa";
+"%@ tokens · %d meals" = "%@ token · %d bữa";
+"%@ tokens · %d sessions" = "%@ token · %d phiên";

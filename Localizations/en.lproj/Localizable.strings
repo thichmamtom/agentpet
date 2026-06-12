@@ -322,3 +322,12 @@
 "Sync failed, will retry." = "Sync failed, will retry.";
 "Today %@ tokens · %d meals" = "Today %@ tokens · %d meals";
 "Today %@ tokens · 1 meal" = "Today %@ tokens · 1 meal";
+
+/* Care v3: GitHub link + stats popover */
+"Connected as %@" = "Connected as %@";
+"Your browser opens GitHub sign-in; the app links automatically." = "Your browser opens GitHub sign-in; the app links automatically.";
+"Sign in with GitHub" = "Sign in with GitHub";
+"Last fed" = "Last fed";
+"%@ tokens · 1 meal" = "%@ tokens · 1 meal";
+"%@ tokens · %d meals" = "%@ tokens · %d meals";
+"%@ tokens · %d sessions" = "%@ tokens · %d sessions";
