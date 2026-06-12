@@ -17,6 +17,8 @@ public enum TranscriptReader {
     // event should supersede them on the next call.
     nonisolated(unsafe) private static var summaryCache: [String: String] = [:]
     nonisolated(unsafe) private static var recapCache: [String: String] = [:]
+    // Byte offset already consumed by `newUsageTokens` per transcript path.
+    nonisolated(unsafe) private static var usageOffsets: [String: UInt64] = [:]
 
     /// Returns the title for the transcript at `path`, or `nil` if unreadable.
     public static func title(at path: String) -> String? {
@@ -68,6 +70,52 @@ public enum TranscriptReader {
     public static func clearCache() {
         summaryCache.removeAll()
         recapCache.removeAll()
+        usageOffsets.removeAll()
+    }
+
+    /// Sums the model usage tokens (input + output) that were *appended* to the
+    /// transcript since the previous call for the same path. The first call for
+    /// a path consumes the whole file. Feeds the pet: each Claude `Stop` reads
+    /// only the new bytes, so repeated calls are cheap even on big transcripts.
+    ///
+    /// Returns `nil` when the file can't be read; `0` when no new usage lines
+    /// appeared.
+    public static func newUsageTokens(at path: String) -> Int? {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+
+        let size = (try? handle.seekToEnd()) ?? 0
+        var start = usageOffsets[path] ?? 0
+        if start > size { start = 0 }   // truncated/replaced file: start over
+        guard size > start else { return 0 }
+
+        try? handle.seek(toOffset: start)
+        let raw = handle.readDataToEndOfFile()
+
+        // Only consume up to the last full line; a partial trailing line (still
+        // being written) is left for the next call.
+        let consumable: Data
+        if let nl = raw.lastIndex(of: UInt8(ascii: "\n")) {
+            consumable = raw[raw.startIndex...nl]
+        } else {
+            return 0
+        }
+        usageOffsets[path] = start + UInt64(consumable.count)
+
+        guard let text = String(data: consumable, encoding: .utf8) else { return 0 }
+        var total = 0
+        for line in text.components(separatedBy: "\n") {
+            // Fast reject: most lines carry no usage object at all.
+            guard line.contains("\"usage\"") else { continue }
+            guard let data = line.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let message = json["message"] as? [String: Any],
+                  let usage = message["usage"] as? [String: Any]
+            else { continue }
+            total += (usage["input_tokens"] as? Int ?? 0)
+            total += (usage["output_tokens"] as? Int ?? 0)
+        }
+        return total
     }
 
     /// Constructs the expected transcript path for a Claude Code session.
