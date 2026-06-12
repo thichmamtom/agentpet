@@ -58,6 +58,7 @@ final class AppDaemon: ObservableObject {
             return
         }
         resolveTitle(for: event)
+        feedLiveTokens(for: event)
 
         // Claude's Stop hook fires identically whether the agent is truly
         // done or just ended its turn by asking the user a question — hold
@@ -69,6 +70,29 @@ final class AppDaemon: ObservableObject {
             notifyIfNeeded(before: before, session: updated)
         }
         refresh()
+    }
+
+    /// Tokens appear in the transcript while Claude is still working, so the
+    /// pet eats live on tool events instead of waiting for `Stop`. Throttled
+    /// per session; reads are incremental (offset-based), so the `Stop` path
+    /// picking up the remainder never double-counts.
+    private var lastLiveFeed: [String: Date] = [:]
+    private static let liveFeedInterval: TimeInterval = 10
+
+    private func feedLiveTokens(for event: AgentEvent) {
+        guard event.agentKind == .claude, event.eventName != "Stop" else { return }
+        let path: String? = event.transcriptPath
+            ?? event.project.map { TranscriptReader.inferredPath(sessionId: event.sessionId, cwd: $0) }
+        guard let path else { return }
+        let now = Date()
+        if let last = lastLiveFeed[event.sessionId],
+           now.timeIntervalSince(last) < Self.liveFeedInterval { return }
+        lastLiveFeed[event.sessionId] = now
+        Task.detached(priority: .utility) {
+            let tokens = TranscriptReader.newUsageTokens(at: path) ?? 0
+            guard tokens > 0 else { return }
+            await MainActor.run { PetCareController.shared.feedTokens(tokens) }
+        }
     }
 
     /// Reads the transcript off-thread to check whether Claude ended its turn
