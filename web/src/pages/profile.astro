@@ -34,6 +34,7 @@ export const prerender = false;
           <div class="min-w-0 flex-1">
             <h2 class="font-display text-2xl font-bold text-ink">Companions</h2>
             <p class="mt-1 text-sm text-muted">Each pet levels up on its own, depending on how you raise it.</p>
+            <div id="prof-overview" class="mt-4 hidden grid-cols-2 gap-3 sm:grid-cols-4"></div>
             <div id="prof-pets" class="mt-5 grid gap-4 sm:grid-cols-2"></div>
             <div id="prof-empty" class="card hidden p-8 text-center">
               <p class="font-display text-lg font-semibold text-ink">No companions yet</p>
@@ -89,7 +90,7 @@ export const prerender = false;
       return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] || c));
     }
 
-    // Stage medals, drawn inline so each badge carries its own icon.
+    // Stage medals: a gradient disc with a white glyph, matching the app badge.
     const STAGE_ICONS: Record<string, string> = {
       Hatchling: '<path d="M12 3C8 6 6 9.5 6 13a6 6 0 0 0 12 0c0-3.5-2-7-6-10z"/>',
       Companion: '<circle cx="7" cy="9" r="2.2"/><circle cx="12" cy="6.8" r="2.2"/><circle cx="17" cy="9" r="2.2"/><path d="M12 11c-3 0-5.5 2.4-5.5 4.8 0 1.5 1.1 2.5 2.6 2.5 1 0 1.9-.4 2.9-.4s1.9.4 2.9.4c1.5 0 2.6-1 2.6-2.5C17.5 13.4 15 11 12 11z"/>',
@@ -97,6 +98,24 @@ export const prerender = false;
       Hero: '<path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z"/>',
       Legend: '<path d="M3 17h18l-1.5-9-4.5 3.5L12 5l-3 6.5L4.5 8z"/>',
     };
+    const STAGE_GRAD: Record<string, [string, string]> = {
+      Hatchling: ["#4dcc73", "#2a9952"],
+      Companion: ["#40ccbd", "#1a8c8c"],
+      Scout: ["#5c9efa", "#2966d9"],
+      Hero: ["#b073f7", "#783fd1"],
+      Legend: ["#ffc747", "#eb851a"],
+    };
+    let gradId = 0;
+    function medal(stage: string, size: number): string {
+      const [a, b] = STAGE_GRAD[stage] || STAGE_GRAD.Hatchling;
+      const id = `mg${gradId++}`;
+      return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" class="drop-shadow-sm">
+        <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs>
+        <circle cx="12" cy="12" r="11" fill="url(#${id})" stroke="#ffffff88" stroke-width="1"/>
+        <ellipse cx="12" cy="8" rx="6" ry="3" fill="#ffffff44"/>
+        <g transform="translate(4 4) scale(0.66)" fill="#fff">${STAGE_ICONS[stage] || ""}</g>
+      </svg>`;
+    }
 
     function petCard(p: any): string {
       const lv = levelFor(p.xp);
@@ -107,14 +126,18 @@ export const prerender = false;
       const thumb = p.thumb
         ? `<img src="${p.thumb}" alt="" class="pixel-art h-14 w-14 object-contain" />`
         : `<svg viewBox="0 0 24 24" class="h-8 w-8" fill="${color}">${STAGE_ICONS[stage]}</svg>`;
+      const toNext = Math.max(0, (next - p.xp) * 5000);
       return `
         <div class="card p-5">
           <div class="flex items-center gap-3">
-            <div class="grid h-16 w-16 shrink-0 place-items-center rounded-2xl" style="background:${color}14">${thumb}</div>
+            <div class="relative grid h-16 w-16 shrink-0 place-items-center rounded-2xl" style="background:${color}14">
+              ${thumb}
+              <div class="absolute -bottom-1 -right-1">${medal(stage, 24)}</div>
+            </div>
             <div class="min-w-0 flex-1">
               <div class="truncate font-display text-lg font-semibold text-ink">${esc(p.name)}</div>
               <span class="mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold" style="background:${color}1f;color:${color}">
-                <svg viewBox="0 0 24 24" class="h-3 w-3" fill="currentColor">${STAGE_ICONS[stage]}</svg>${stage}
+                ${medal(stage, 13)}${stage}
               </span>
             </div>
             <div class="relative grid h-14 w-14 shrink-0 place-items-center">
@@ -134,6 +157,7 @@ export const prerender = false;
             <span>${p.xp.toLocaleString()} / ${next.toLocaleString()} XP</span>
             <span>${pct}%</span>
           </div>
+          <p class="mt-1 text-[11px] font-medium" style="color:${color}">≈ ${tokenLabel(toNext)} tokens to Lv ${lv + 1}</p>
           <dl class="mt-3 grid grid-cols-3 gap-2 text-center">
             <div class="rounded-xl bg-brand-50/60 px-2 py-2" title="${p.tokens.toLocaleString()} tokens">
               <dt class="text-[10px] font-semibold uppercase tracking-wide text-faint">Tokens</dt>
@@ -152,6 +176,32 @@ export const prerender = false;
         </div>`;
     }
 
+    function renderOverview(pets: any[]) {
+      const box = document.getElementById("prof-overview");
+      if (!box) return;
+      const totalXp = pets.reduce((s, p) => s + p.xp, 0);
+      const totalTokens = pets.reduce((s, p) => s + p.tokens, 0);
+      const best = pets.reduce((a, p) => (p.xp > (a?.xp ?? -1) ? p : a), null as any);
+      const bestLv = best ? levelFor(best.xp) : 0;
+      const cells = [
+        ["Companions", String(pets.length)],
+        ["Total level", String(pets.reduce((s, p) => s + levelFor(p.xp), 0))],
+        ["Total tokens", tokenLabel(totalTokens)],
+        ["Top pet", best ? `${esc(best.name)} · Lv ${bestLv}` : "—"],
+      ];
+      box.innerHTML = cells
+        .map(
+          ([label, value]) => `
+          <div class="card px-4 py-3">
+            <div class="text-[10px] font-semibold uppercase tracking-wide text-faint">${label}</div>
+            <div class="mt-0.5 truncate font-display text-lg font-bold text-ink">${value}</div>
+          </div>`
+        )
+        .join("");
+      box.classList.remove("hidden");
+      box.classList.add("grid");
+    }
+
     async function load() {
       const me = await fetch("/api/me.json").then((r) => r.json()).catch(() => null);
       document.getElementById("prof-loading")?.classList.add("hidden");
@@ -167,6 +217,7 @@ export const prerender = false;
       const grid = document.getElementById("prof-pets")!;
       if (pets.length) {
         grid.innerHTML = pets.map(petCard).join("");
+        renderOverview(pets);
         // Already linked and syncing: the connect walkthrough is just noise.
         document.getElementById("prof-connect")?.classList.add("hidden");
       } else {

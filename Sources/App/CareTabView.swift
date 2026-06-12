@@ -49,6 +49,7 @@ struct CareTabView: View {
                                 .font(.title3).bold()
                             Text(verbatim: "Lv \(care.level)")
                                 .font(.title3).foregroundStyle(.secondary)
+                            StageBadge(stageIndex: care.stageIndex, size: 22)
                             Text(NSLocalizedString(care.stageKey, comment: "evolution stage"))
                                 .font(.caption).bold()
                                 .padding(.horizontal, 8).padding(.vertical, 3)
@@ -253,6 +254,9 @@ struct CareTabView: View {
                 }
             }
             .frame(width: 24, height: 24)
+            .overlay(alignment: .bottomTrailing) {
+                StageBadge(stageIndex: idx, size: 13).offset(x: 3, y: 3)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(verbatim: imagePets.pack(id: id)?.displayName ?? id)

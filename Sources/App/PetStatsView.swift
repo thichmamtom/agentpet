@@ -62,6 +62,7 @@ struct PetStatsView: View {
                 HStack(spacing: 6) {
                     Text(verbatim: "Lv \(care.level)")
                         .font(.system(size: 12, weight: .bold)).foregroundStyle(stageColor)
+                    StageBadge(stageIndex: care.stageIndex, size: 16)
                     Text(NSLocalizedString(care.stageKey, comment: "stage"))
                         .font(.system(size: 10, weight: .semibold))
                         .padding(.horizontal, 6).padding(.vertical, 2)
