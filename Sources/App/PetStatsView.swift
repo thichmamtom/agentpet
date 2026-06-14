@@ -1,14 +1,16 @@
+import AppKit
 import SwiftUI
 import AgentPetCore
 
-/// The pet's right-click HUD: stats only — identity, XP, hunger, feeding
-/// numbers, a 7-day burn trend, and subscription limits when OpenUsage runs.
-/// Controls live in the menu bar popover and Settings, not here.
+/// The pet's right-click HUD: the companion's stats plus a compact footer with
+/// Settings / Updates / Quit (the same actions as the menu bar popover).
 struct PetStatsView: View {
     @ObservedObject private var care = PetCareController.shared
     @ObservedObject private var pet = PetController.shared
     @ObservedObject private var imagePets = ImagePetStore.shared
     @ObservedObject private var usage = OpenUsageClient.shared
+    @ObservedObject private var updater = UpdaterController.shared
+    @State private var updateLabel: String?
 
     private static let stageColors: [Color] = [.green, .teal, .blue, .purple, .orange]
 
@@ -34,6 +36,7 @@ struct PetStatsView: View {
                         .font(.system(size: 10)).foregroundStyle(.white.opacity(0.55))
                 }
             }
+            footer
         }
         .padding(14)
         .frame(width: 300)
@@ -41,6 +44,48 @@ struct PetStatsView: View {
         .environment(\.colorScheme, .dark)
         .textSelection(.enabled)
         .noFocusRing()
+    }
+
+    // MARK: - Footer (Settings / Updates / Quit)
+
+    private var footer: some View {
+        VStack(spacing: 8) {
+            Divider().overlay(Color.white.opacity(0.08))
+            HStack {
+                footButton(icon: "gearshape", label: "Settings") {
+                    PetWindowController.shared.closeStatsPopover()
+                    SettingsWindowController.shared.show()
+                }
+                footButton(icon: "arrow.triangle.2.circlepath",
+                           label: updateLabel ?? NSLocalizedString("Updates", comment: ""),
+                           badge: updater.updatePending) {
+                    updateLabel = NSLocalizedString("Checking…", comment: "")
+                    UpdaterController.shared.checkForUpdates()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { updateLabel = nil }
+                }
+                Spacer()
+                footButton(icon: "power", label: "Quit") {
+                    NSApplication.shared.terminate(nil)
+                }
+            }
+        }
+    }
+
+    private func footButton(icon: String, label: String, badge: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: icon)
+                    if badge {
+                        Circle().fill(Color.orange).frame(width: 5, height: 5).offset(x: 3, y: -3)
+                    }
+                }
+                Text(verbatim: label)
+            }
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(.white.opacity(0.8))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Header

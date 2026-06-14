@@ -370,3 +370,9 @@
 "Việt Nam" = "Việt Nam";
 "Opens buymeacoffee.com in your browser." = "Mở buymeacoffee.com trên trình duyệt.";
 "Quét bằng app ngân hàng bất kỳ (VPBank · NGUYEN THANH DAT)" = "Quét bằng app ngân hàng bất kỳ (VPBank · NGUYEN THANH DAT)";
+
+/* HUD footer */
+"Settings" = "Cài đặt";
+"Updates" = "Cập nhật";
+"Quit" = "Thoát";
+"Checking…" = "Đang kiểm tra…";

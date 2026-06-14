@@ -88,6 +88,11 @@ final class PetWindowController: ObservableObject {
     /// Transient stats-only popover anchored at the pet.
     private var statsPopover: NSPopover?
 
+    /// Closes the stats popover (e.g. when its footer opens Settings).
+    func closeStatsPopover() {
+        statsPopover?.performClose(nil)
+    }
+
     private func showStatsPopover(relativeTo rect: NSRect, of view: NSView) {
         if let shown = statsPopover, shown.isShown {
             shown.performClose(nil)
