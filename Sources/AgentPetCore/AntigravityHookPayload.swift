@@ -18,6 +18,7 @@ public struct AntigravityHookPayload: Decodable, Equatable {
     public let fullyIdle: Bool?
     public let invocationNum: Int?
     public let stepIdx: Int?
+    public let model: HookModelInfo?
 
     public struct ToolCall: Decodable, Equatable {
         public let name: String?
@@ -38,12 +39,17 @@ public struct AntigravityHookPayload: Decodable, Equatable {
         } else {
             return nil
         }
+        let context = ActivityFormatter.activityMessage(
+            eventName: state.rawValue, sessionId: conversationId,
+            toolName: toolCall?.name, toolInput: nil, explicitMessage: nil
+        )
         return AgentEvent(
             sessionId: conversationId,
             agentKind: .antigravity,
             eventName: state.rawValue,
             project: workspacePaths?.first(where: { !$0.isEmpty }),
-            message: toolCall?.name,
+            message: context,
+            model: model?.displayName,
             transcriptPath: transcriptPath,
             timestamp: now
         )

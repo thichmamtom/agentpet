@@ -575,6 +575,7 @@ private struct BubbleRowPreview: View {
     private let mockProject  = "agentpet"
     private let mockMessage  = "Editing SettingsModel.swift"
     private let mockElapsed  = "3m"
+    private let mockModel    = "Sonnet 4.6"
 
     var body: some View {
         let visible = settings.effectiveLayout.tokens.filter { $0.isVisible }
@@ -636,6 +637,16 @@ private struct BubbleRowPreview: View {
             Text("Working")
                 .font(.system(size: settings.fontSize.secondaryPt))
                 .foregroundStyle(.secondary)
+        case .model:
+            Text(mockModel)
+                .font(.system(size: settings.fontSize.secondaryPt, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.12))
+                )
         case .elapsed:
             Text(mockElapsed)
                 .font(.system(size: settings.fontSize.secondaryPt))

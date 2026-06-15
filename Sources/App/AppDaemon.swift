@@ -58,6 +58,7 @@ final class AppDaemon: ObservableObject {
             return
         }
         resolveTitle(for: event)
+        resolveModel(for: event)
         feedLiveTokens(for: event)
 
         // Claude's Stop hook fires identically whether the agent is truly
@@ -134,6 +135,24 @@ final class AppDaemon: ObservableObject {
             guard let title = TranscriptReader.title(at: path) else { return }
             await MainActor.run { [weak self] in
                 self?.store.updateTitle(id: sessionId, title: title)
+                self?.refresh()
+            }
+        }
+    }
+
+    /// Reads the transcript off-thread for the model of the latest assistant
+    /// message — picks up `/model` switches mid-session, which Claude's hook
+    /// payloads only report at `SessionStart`.
+    private func resolveModel(for event: AgentEvent) {
+        guard event.agentKind == .claude else { return }
+        let sessionId = event.sessionId
+        let path: String? = event.transcriptPath
+            ?? event.project.map { TranscriptReader.inferredPath(sessionId: sessionId, cwd: $0) }
+        guard let path else { return }
+        Task.detached(priority: .utility) { [weak self] in
+            guard let model = TranscriptReader.latestAssistantModel(at: path) else { return }
+            await MainActor.run { [weak self] in
+                self?.store.updateModel(id: sessionId, model: model)
                 self?.refresh()
             }
         }

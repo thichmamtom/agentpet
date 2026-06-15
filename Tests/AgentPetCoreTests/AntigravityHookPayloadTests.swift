@@ -14,8 +14,13 @@ final class AntigravityHookPayloadTests: XCTestCase {
         XCTAssertEqual(e?.sessionId, "c1")
         XCTAssertEqual(e?.eventName, "working")
         XCTAssertEqual(e?.project, "/Users/me/proj")
-        XCTAssertEqual(e?.message, "run_command")
+        XCTAssertTrue(ActivityTheme.chef.running.contains(e?.message ?? ""), "got \(e?.message ?? "nil")")
         XCTAssertEqual(StateMapper.state(for: .antigravity, eventName: e!.eventName), .working)
+    }
+
+    func testDecodesModel() {
+        let e = event(#"{"conversationId":"c1","workspacePaths":["/p"],"stepIdx":0,"toolCall":{"name":"run_command"},"model":{"display_name":"Gemini 3 Pro"}}"#)
+        XCTAssertEqual(e?.model, "Gemini 3 Pro")
     }
 
     func testStopWithTerminationReasonIsDone() {

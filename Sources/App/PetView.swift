@@ -767,6 +767,21 @@ private struct AgentRow: View {
             Text(session.state.rawValue.capitalized)
                 .font(.system(size: secondaryPt, weight: .regular))
                 .foregroundStyle(textColor(0.55))
+        case .model:
+            if let model = session.model {
+                Text(model)
+                    .font(.system(size: secondaryPt, weight: .semibold))
+                    .foregroundStyle(textColor(0.5))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(
+                        Capsule()
+                            .fill(textColor(0.08))
+                    )
+                    .layoutPriority(-1)
+            }
         case .elapsed:
             // Tick every second so the elapsed time counts up live instead of
             // freezing at the value sampled when the row was last re-rendered.
@@ -781,6 +796,7 @@ private struct AgentRow: View {
 
     private func tokenHasValue(_ token: BubbleToken) -> Bool {
         if token == .title { return session.title != nil }
+        if token == .model { return session.model != nil }
         return true
     }
 
@@ -807,7 +823,7 @@ private struct AgentRow: View {
             }
             let m = session.message?.trimmingCharacters(in: .whitespaces) ?? ""
             if !m.isEmpty { return m }
-            return ClaudeActivityFormatter.stateMessage(for: session.state)
+            return ActivityFormatter.stateMessage(for: session.state)
                 ?? session.state.rawValue.capitalized
         }
         // done / waiting / idle: always use the bubble message (custom when set,
@@ -815,7 +831,7 @@ private struct AgentRow: View {
         // unlocalized (a separate process), so we never fall back to it here.
         let line = bubbleMsgs.line(for: session.agentKind, mood: mood, seed: session.id)
         if !line.isEmpty { return line }
-        return ClaudeActivityFormatter.stateMessage(for: session.state)
+        return ActivityFormatter.stateMessage(for: session.state)
             ?? session.state.rawValue.capitalized
     }
 
