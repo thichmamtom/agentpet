@@ -189,22 +189,6 @@ struct CareTabView: View {
                         Text("Active").font(.caption).bold().foregroundStyle(.green)
                     }
                 }
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(verbatim: "OpenUsage")
-                        Text(usage.available
-                             ? "Connected: adds limits for every other provider."
-                             : "Optional: install OpenUsage to track every provider's limits.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if usage.available {
-                        Text("Connected").font(.caption).bold().foregroundStyle(.green)
-                    } else {
-                        Button("Get it") { openURL(URL(string: "https://www.openusage.ai")!) }
-                            .controlSize(.small)
-                    }
-                }
                 ForEach(NativeUsageProbe.combined()) { p in
                     let used = 1 - (p.fractionLeft ?? 0)
                     let color: Color = used > 0.9 ? .red : (used > 0.75 ? .orange : stageColor)
@@ -230,6 +214,7 @@ struct CareTabView: View {
         .formStyle(.grouped)
         .onAppear {
             care.refreshDay()
+            probe.poll()
             usage.poll()
         }
         .onReceive(tick) { date in
