@@ -13,24 +13,41 @@ const FOUNDERS = [
 ];
 const FOUNDER_LOGINS = new Set(FOUNDERS.map((f) => f.login));
 
-const FALLBACK = [
+// Always-include set: merged contributors that GitHub's cached contributor
+// API can lag behind by hours, so we union them in to show credit right away.
+const KNOWN = [
   { login: "3xhvy", avatar_url: "https://avatars.githubusercontent.com/u/127609002?v=4", html_url: "https://github.com/3xhvy" },
+  { login: "aiexkwan", avatar_url: "https://avatars.githubusercontent.com/u/203569546?v=4", html_url: "https://github.com/aiexkwan" },
+  { login: "23092003e", avatar_url: "https://avatars.githubusercontent.com/u/114332653?v=4", html_url: "https://github.com/23092003e" },
   { login: "tranhuuhuy297", avatar_url: "https://avatars.githubusercontent.com/u/46334604?v=4", html_url: "https://github.com/tranhuuhuy297" },
   { login: "heo001997", avatar_url: "https://avatars.githubusercontent.com/u/20258751?v=4", html_url: "https://github.com/heo001997" },
   { login: "minhat-dg", avatar_url: "https://avatars.githubusercontent.com/u/70907443?v=4", html_url: "https://github.com/minhat-dg" },
 ];
 
-const NAMES: Record<string, string> = { "3xhvy": "Hồ Hoàng Huy" };
-const ROLES: Record<string, string> = { "3xhvy": "Multi-agent bubble" };
+const NAMES: Record<string, string> = { "3xhvy": "Hồ Hoàng Huy", "23092003e": "Mạnh Hoàng" };
+const ROLES: Record<string, string> = {
+  "3xhvy": "Multi-agent bubble",
+  "aiexkwan": "Memory & performance",
+  "23092003e": "Windows hooks",
+};
 
-let rest: any[] = FALLBACK;
+let rest: any[] = [...KNOWN];
 try {
   const res = await fetch(`https://api.github.com/repos/${REPO}/contributors?per_page=100`, {
     headers: { "User-Agent": "agentpet-site", Accept: "application/vnd.github+json" },
   });
   if (res.ok) {
     const data: any = await res.json();
-    if (Array.isArray(data) && data.length) rest = data.filter((c: any) => c.type !== "Bot");
+    if (Array.isArray(data) && data.length) {
+      // Union the API list with KNOWN (API order first), dedup by login.
+      const seen = new Set<string>();
+      rest = [];
+      for (const c of [...data.filter((c: any) => c.type !== "Bot"), ...KNOWN]) {
+        if (seen.has(c.login)) continue;
+        seen.add(c.login);
+        rest.push(c);
+      }
+    }
   }
 } catch {}
 rest = rest.filter((c) => !FOUNDER_LOGINS.has(c.login));
