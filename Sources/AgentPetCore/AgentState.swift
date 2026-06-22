@@ -26,6 +26,8 @@ public enum AgentKind: String, Codable, Sendable {
     case antigravity
     case copilot
     case kiroCLI
+    /// Factory Droid CLI (`droid`).
+    case droid
     /// Any CLI agent launched via the `agentpet run` wrapper.
     case cli
     case unknown

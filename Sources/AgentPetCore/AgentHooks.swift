@@ -93,6 +93,16 @@ public enum AgentHooks {
                 kind: .kiroCLI, style: .kiroFlat,
                 events: ["agentSpawn", "userPromptSubmit", "postToolUse", "stop"],
                 settingsPath: home + "/.kiro/agents/default.json")
+        case .droid:
+            // Factory Droid CLI: ~/.factory/hooks.json, identical nested shape and
+            // snake_case stdin payload as Claude (session_id/cwd/hook_event_name).
+            // Notification fires on permission/approval requests (and 60s idle),
+            // which we map to "waiting". Our hook command always exits 0, so the
+            // PreToolUse hook can't block tool calls.
+            return AgentHookSpec(
+                kind: .droid, style: .claudeNested,
+                events: ["SessionStart", "UserPromptSubmit", "PreToolUse", "Notification", "Stop", "SubagentStop", "SessionEnd"],
+                settingsPath: home + "/.factory/hooks.json")
         case .cli, .unknown:
             return nil
         }

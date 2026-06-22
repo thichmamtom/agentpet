@@ -33,5 +33,7 @@ public enum AgentCatalog {
                          note: "Copilot CLI only (~/.copilot/hooks)"),
         AgentIntegration(kind: .kiroCLI, displayName: "Kiro CLI", isSupported: true,
                          note: "Hooks the default Kiro CLI agent"),
+        AgentIntegration(kind: .droid, displayName: "Factory Droid", isSupported: true,
+                         note: "Factory Droid CLI (~/.factory/hooks.json)"),
     ]
 }

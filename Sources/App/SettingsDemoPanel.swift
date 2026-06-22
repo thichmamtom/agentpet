@@ -357,6 +357,7 @@ struct SettingsDemoPanel: View {
         case .opencode: return "cli-tools"
         case .windsurf: return "dashboard"
         case .antigravity: return "mobile-app"
+        case .droid: return "backend"
         default: return "project"
         }
     }
@@ -400,6 +401,7 @@ struct SettingsDemoPanel: View {
         case .gemini:      return ("read_file", "model/ranker.py")
         case .cursor:      return ("run_terminal_cmd", nil)
         case .antigravity: return ("codebase_search", nil)
+        case .droid:       return ("Execute", nil)
         case .opencode:    return ("Grep", nil)
         case .windsurf:    return ("Write", "src/dashboard.tsx")
         default:           return ("Read", "README.md")
@@ -414,6 +416,7 @@ struct SettingsDemoPanel: View {
         case .gemini:      return "Gemini 2.5 Pro"
         case .cursor:      return "Composer"
         case .antigravity: return "Claude Opus 4.8"
+        case .droid:       return "Claude Opus 4.8"
         default:           return nil
         }
     }

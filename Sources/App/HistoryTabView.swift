@@ -231,6 +231,7 @@ private func sfSymbol(for kind: AgentKind) -> String {
     case .antigravity: return "arrow.up.circle.fill"
     case .copilot:     return "airplane"
     case .kiroCLI:     return "k.circle.fill"
+    case .droid:       return "cpu.fill"
     case .cli:         return "terminal.fill"
     case .unknown:     return "questionmark.circle"
     }

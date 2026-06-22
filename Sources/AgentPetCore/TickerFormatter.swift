@@ -16,6 +16,7 @@ public enum TickerFormatter {
         case .antigravity: return "Antigravity"
         case .copilot:   return "Copilot"
         case .kiroCLI:   return "Kiro"
+        case .droid:     return "Droid"
         case .cli:       return "Agent"
         case .unknown:   return "Agent"
         }

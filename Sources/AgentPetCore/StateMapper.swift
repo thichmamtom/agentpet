@@ -12,6 +12,7 @@ public enum StateMapper {
         case .claude: return eventName == "SessionEnd"
         case .gemini: return eventName == "SessionEnd"
         case .cursor: return eventName == "sessionEnd"
+        case .droid: return eventName == "SessionEnd"
         default: return false
         }
     }
@@ -95,6 +96,18 @@ public enum StateMapper {
                  "postToolUse", "PostToolUse": return .working
             case "notification", "Notification": return .waiting
             case "stop", "Stop": return .done
+            default: return nil
+            }
+        case .droid:
+            // Factory Droid CLI uses Claude-style PascalCase event names.
+            switch eventName {
+            case "SessionStart": return .registered
+            case "UserPromptSubmit", "PreToolUse", "PostToolUse": return .working
+            case "Notification": return .waiting
+            case "Stop": return .done
+            // SubagentStop fires when a sub-droid task finishes mid-session, not
+            // when the main session is done; ignore it to avoid a done→working flicker.
+            case "SubagentStop": return nil
             default: return nil
             }
         case .cli, .unknown:
