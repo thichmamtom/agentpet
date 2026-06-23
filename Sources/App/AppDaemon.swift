@@ -77,6 +77,15 @@ final class AppDaemon: ObservableObject {
         refresh()
     }
 
+    /// Resolves which pet should receive XP for a given project path.
+    /// Split ON  → the project's configured pet (or the selected pet if unconfigured).
+    /// Split OFF → always the selected pet (identical to today's behaviour).
+    func careTarget(forProject project: String?) -> String? {
+        guard PetController.shared.splitPet else { return PetController.shared.selectedPetID }
+        return ProjectPetSettings.shared.petID(forProject: project)
+            ?? PetController.shared.selectedPetID
+    }
+
     /// Tokens appear in the transcript while Claude is still working, so the
     /// pet eats live on tool events instead of waiting for `Stop`. Throttled
     /// per session; reads are incremental (offset-based), so the `Stop` path
@@ -93,10 +102,16 @@ final class AppDaemon: ObservableObject {
         if let last = lastLiveFeed[event.sessionId],
            now.timeIntervalSince(last) < Self.liveFeedInterval { return }
         lastLiveFeed[event.sessionId] = now
+        // Capture the project string (Sendable) before crossing the actor boundary;
+        // resolve careTarget on the main actor inside the awaited block.
+        let project = event.project
         Task.detached(priority: .utility) {
             let tokens = TranscriptReader.newUsageTokens(at: path) ?? 0
             guard tokens > 0 else { return }
-            await MainActor.run { PetCareController.shared.feedTokens(tokens) }
+            await MainActor.run {
+                PetCareController.shared.feedTokens(tokens,
+                    petID: AppDaemon.shared.careTarget(forProject: project))
+            }
         }
     }
 
@@ -112,6 +127,8 @@ final class AppDaemon: ObservableObject {
             notifyIfNeeded(before: before, session: session)
             return
         }
+        // Capture the project string (Sendable) before crossing the actor boundary.
+        let project = session.project
         Task.detached(priority: .utility) { [weak self] in
             let isQuestion = TranscriptReader.latestAssistantText(at: path)
                 .map(QuestionDetector.looksLikeQuestion) ?? false
@@ -119,7 +136,8 @@ final class AppDaemon: ObservableObject {
             let tokens = TranscriptReader.newUsageTokens(at: path) ?? 0
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                PetCareController.shared.feedTokens(tokens)
+                PetCareController.shared.feedTokens(tokens,
+                    petID: self.careTarget(forProject: project))
                 if isQuestion {
                     self.store.refineState(id: sessionId, from: .done, to: .waiting, since: stateSince)
                 }
@@ -185,7 +203,7 @@ final class AppDaemon: ObservableObject {
             NotificationManager.shared.notify(
                 title: "\(project) finished", body: "Agent completed its turn")
             SoundSettings.shared.play(.done)
-            PetCareController.shared.recordMeal()
+            PetCareController.shared.recordMeal(petID: careTarget(forProject: session.project))
         default:
             break
         }

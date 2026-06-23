@@ -277,6 +277,18 @@ private struct GeneralTab: View {
 }
             }
 
+            Section("Pet display") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Split pet")
+                        Text("Spawn one pet per active project instead of one shared pet.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    ColorSwitch(isOn: $pet.splitPet)
+                }
+            }
+
             Section("Notifications") {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
@@ -406,6 +418,9 @@ private struct PetTab: View {
     @State private var creating = false
     @State private var petQuery = ""
 
+    enum PetSubTab { case `default`, project }
+    @State private var petSubTab: PetSubTab = .default
+
     private var filteredPacks: [ImagePetPack] {
         guard !petQuery.isEmpty else { return imagePets.packs }
         let q = petQuery.lowercased()
@@ -413,6 +428,44 @@ private struct PetTab: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            Picker("", selection: $petSubTab) {
+                Text("Default pet").tag(PetSubTab.default)
+                Text("Project pets").tag(PetSubTab.project)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            Divider()
+
+            Group {
+                if petSubTab == .default {
+                    defaultContent
+                } else {
+                    ProjectPetsView()
+                }
+            }
+            .frame(maxHeight: .infinity)
+        }
+        .sheet(isPresented: $browsing) {
+            BrowsePetsView(onClose: { browsing = false })
+        }
+        .sheet(isPresented: $creating) {
+            CreatePetView(
+                onCreate: { id in
+                    creating = false
+                    imagePets.reload()
+                    pet.selectedPetID = id
+                },
+                onCancel: { creating = false }
+            )
+        }
+    }
+
+    private var defaultContent: some View {
         Form {
             Section {
                 HStack(spacing: 14) {
@@ -484,19 +537,6 @@ private struct PetTab: View {
             }
         }
         .formStyle(.grouped)
-        .sheet(isPresented: $browsing) {
-            BrowsePetsView(onClose: { browsing = false })
-        }
-        .sheet(isPresented: $creating) {
-            CreatePetView(
-                onCreate: { id in
-                    creating = false
-                    imagePets.reload()
-                    pet.selectedPetID = id
-                },
-                onCancel: { creating = false }
-            )
-        }
     }
 
     @ViewBuilder private var petPreview: some View {

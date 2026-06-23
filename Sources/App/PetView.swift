@@ -8,10 +8,11 @@ private let TYPE_INTERVAL: TimeInterval = 0.045
 private let DOT_CYCLE_INTERVAL: TimeInterval = 0.400
 
 /// The pet sprite alone (imported pack, reacting to mood). Shows a paw
-/// placeholder if no pet is selected yet.
+/// placeholder if no pet is selected yet. The pet id and mood come from the
+/// per-window model rather than the global `PetController`.
 struct PetView: View {
+    @ObservedObject var model: PetWindowModel
     var size: CGFloat = 120
-    @ObservedObject private var pet = PetController.shared
     @ObservedObject private var imagePets = ImagePetStore.shared
     @ObservedObject private var bindings = PetBindingsStore.shared
 
@@ -22,9 +23,9 @@ struct PetView: View {
     }
 
     @ViewBuilder private var content: some View {
-        if let id = pet.selectedPetID, let pack = imagePets.pack(id: id) {
-            let clip = bindings.clipIndex(packId: pack.id, clipCount: pack.clipCount, mood: pet.mood)
-            ImageSpriteView(frames: pack.clip(clip), mood: pet.mood, size: size)
+        if let id = model.petID, let pack = imagePets.pack(id: id) {
+            let clip = bindings.clipIndex(packId: pack.id, clipCount: pack.clipCount, mood: model.mood)
+            ImageSpriteView(frames: pack.clip(clip), mood: model.mood, size: size)
         } else {
             Image(systemName: "pawprint.fill")
                 .font(.system(size: size * 0.4))
@@ -42,26 +43,30 @@ private struct PetContentSizeKey: PreferenceKey {
     }
 }
 
-/// The full floating window content: a chat bubble above the pet.
+/// The full floating window content: a chat bubble above the pet. Per-window
+/// fields (mood/petID/sessions/chatLine) come from `model`; global toggles and
+/// the tap-interaction state still come from `PetController.shared`.
 struct FloatingPetView: View {
+    @ObservedObject var model: PetWindowModel
     @ObservedObject private var pet = PetController.shared
     @ObservedObject private var bubbleSettings = BubbleSettings.shared
     @ObservedObject private var appLang = AppLanguage.shared
 
     var body: some View {
         VStack(spacing: 2) {
-            if pet.showChat && pet.selectedPetID != nil {
-                if bubbleSettings.multiAgentBubbleEnabled && !pet.activeAgentSessions.isEmpty {
-                    AgentBubble(sessions: pet.activeAgentSessions)
+            if pet.showChat && model.petID != nil {
+                if bubbleSettings.multiAgentBubbleEnabled && !model.sessions.isEmpty {
+                    AgentBubble(sessions: model.sessions, forceProjectToken: model.projectName != nil)
                         .padding(.horizontal, 10).padding(.vertical, 6)
                         .transition(AnyTransition.scale(scale: 0.6).combined(with: .opacity))
-                } else if !pet.chatLine.isEmpty {
-                    ChatBubble(text: pet.chatLine)
+                } else if !model.chatLine.isEmpty {
+                    ChatBubble(text: model.chatLine,
+                               projectName: pet.splitPet ? model.projectName : nil)
                         .padding(.horizontal, 10).padding(.vertical, 6)
                         .transition(AnyTransition.scale(scale: 0.6).combined(with: .opacity))
                 }
             }
-            PetView(size: pet.petPoint)
+            PetView(model: model, size: pet.petPoint)
                 .overlay {
                     if pet.petTapCount > 0 {
                         PetHearts(size: pet.petPoint)
@@ -108,11 +113,11 @@ struct FloatingPetView: View {
                 Color.clear.preference(key: PetContentSizeKey.self, value: proxy.size)
             }
         )
-        .onPreferenceChange(PetContentSizeKey.self) { size in
-            PetWindowController.shared.resizeToContent(size)
+        .onPreferenceChange(PetContentSizeKey.self) { [key = model.key] size in
+            PetWindowController.shared.resizeToContent(size, forKey: key)
         }
-        .animation(.easeInOut(duration: 0.22), value: pet.chatLine)
-        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: pet.activeAgentSessions.count)
+        .animation(.easeInOut(duration: 0.22), value: model.chatLine)
+        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: model.sessions.count)
         .animation(.easeInOut, value: pet.showChat)
         // Re-resolve bubble text when the app language changes at runtime.
         .environment(\.locale, appLang.locale)
@@ -131,9 +136,13 @@ private struct GroupedSession: Identifiable {
 /// Speech bubble listing one row per (agentKind, project) group.
 /// Applies filter/sort/cap from `BubbleSettings` before rendering.
 /// `tailEdge` controls whether the pointer arrow points down (pet) or up (menu bar).
+/// `forceProjectToken`: when true the `.project` token is shown even if the user
+/// hid it in BubbleSettings — used in split-pet windows so duplicate pets are
+/// distinguishable by their project name.
 struct AgentBubble: View {
     let sessions: [AgentSession]
     var tailEdge: Edge = .bottom
+    var forceProjectToken: Bool = false
     @ObservedObject private var settings = BubbleSettings.shared
 
     // attentionPriority is internal to AgentPetCore — use local rank
@@ -267,16 +276,19 @@ struct AgentBubble: View {
         switch settings.displayMode {
         case .list:
             ForEach(groupedSessions) { group in
-                AgentRow(session: group.session, count: group.count, chatStyle: isPetChat)
+                AgentRow(session: group.session, count: group.count, chatStyle: isPetChat,
+                         forceProjectToken: forceProjectToken)
             }
         case .carousel:
-            BubbleCarousel(groups: groupedSessions, chatStyle: isPetChat)
+            BubbleCarousel(groups: groupedSessions, chatStyle: isPetChat,
+                           forceProjectToken: forceProjectToken)
         case .compact:
             BubbleCompactLayout(
                 groups: groupedSessions,
                 totalCount: totalSessionCount,
                 chatStyle: isPetChat,
-                textColor: textColor
+                textColor: textColor,
+                forceProjectToken: forceProjectToken
             )
         }
     }
@@ -295,6 +307,7 @@ struct AgentBubble: View {
 private struct BubbleCarousel: View {
     let groups: [GroupedSession]
     var chatStyle: Bool = false
+    var forceProjectToken: Bool = false
     @ObservedObject private var settings = BubbleSettings.shared
     @State private var index = 0
     @State private var timer: Timer?
@@ -307,7 +320,8 @@ private struct BubbleCarousel: View {
         VStack(alignment: .leading, spacing: chatStyle ? 4 : 5) {
             Group {
                 if let group = groups[safe: index] {
-                    AgentRow(session: group.session, count: group.count, chatStyle: chatStyle)
+                    AgentRow(session: group.session, count: group.count, chatStyle: chatStyle,
+                             forceProjectToken: forceProjectToken)
                         .id(group.id)
                         .transition(.opacity)
                 }
@@ -463,6 +477,7 @@ private struct BubbleCompactLayout: View {
     let totalCount: Int
     var chatStyle: Bool = false
     let textColor: (Double) -> Color
+    var forceProjectToken: Bool = false
     @ObservedObject private var settings = BubbleSettings.shared
     @State private var expanded = false
 
@@ -475,7 +490,8 @@ private struct BubbleCompactLayout: View {
                 .foregroundStyle(textColor(0.45))
 
             ForEach(visibleGroups) { group in
-                AgentRow(session: group.session, count: group.count, chatStyle: chatStyle)
+                AgentRow(session: group.session, count: group.count, chatStyle: chatStyle,
+                         forceProjectToken: forceProjectToken)
             }
 
             if hiddenCount > 0 {
@@ -713,10 +729,13 @@ private struct ShimmeringText: View {
 
 /// One row per agent session. Iterates `BubbleSettings.effectiveLayout` tokens
 /// in order on a single line; project/title shrink before the message does.
+/// `forceProjectToken`: when true the `.project` token is always included even if
+/// the user hid it — used in split-pet windows for project disambiguation.
 private struct AgentRow: View {
     let session: AgentSession
     var count: Int = 1
     var chatStyle: Bool = false
+    var forceProjectToken: Bool = false
     @ObservedObject private var settings = BubbleSettings.shared
     @ObservedObject private var bubbleMsgs = BubbleMessages.shared
 
@@ -734,7 +753,11 @@ private struct AgentRow: View {
     private static let waitingColor = Color(red: 0xF5 / 255.0, green: 0x9E / 255.0, blue: 0x0B / 255.0)
 
     var body: some View {
-        let visible = settings.effectiveLayout.tokens.filter { $0.isVisible && tokenHasValue($0.token) }
+        // In split-pet windows we force the `.project` token visible so the user
+        // can tell apart pets from different projects even if they hid it globally.
+        let visible = settings.effectiveLayout.tokens.filter {
+            ($0.isVisible || (forceProjectToken && $0.token == .project)) && tokenHasValue($0.token)
+        }
 
         HStack(alignment: .center, spacing: 4) {
             if visible.contains(where: { $0.token == .dot }) {
@@ -912,8 +935,11 @@ private struct AgentRow: View {
 
 /// A plain speech bubble with a downward tail, used for celebrate/done lines.
 /// Theme-aware (light/dark/system); reused by the Settings live preview.
+/// When `projectName` is non-nil (split-pet mode), a small dimmed caption is
+/// rendered above the main text so the window is identifiable.
 struct ChatBubble: View {
     let text: String
+    var projectName: String? = nil
     @ObservedObject private var settings = BubbleSettings.shared
 
     private var fill: Color {
@@ -932,6 +958,14 @@ struct ChatBubble: View {
         }
     }
 
+    private var dimmedTextColor: Color {
+        switch settings.theme {
+        case .light:  return .black.opacity(0.45)
+        case .dark:   return .white.opacity(0.45)
+        case .system: return Color.primary.opacity(0.45)
+        }
+    }
+
     private var borderColor: Color {
         switch settings.theme {
         case .light:  return .black.opacity(0.06)
@@ -942,21 +976,30 @@ struct ChatBubble: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text(text)
-                .font(.system(size: settings.fontSize.primaryPt, weight: .medium))
-                .foregroundStyle(textColor)
-                .contentTransition(.opacity)   // cross-fade text changes instead of a hard swap (no flicker)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(Capsule().fill(fill))
-                .overlay(Capsule().strokeBorder(borderColor, lineWidth: 1))
-                // Flatten to one layer so the shadow traces the capsule's
-                // rounded silhouette instead of its rectangular bounding box
-                // (SwiftUI draws boxy shadows on composed views otherwise).
-                .compositingGroup()
-                .shadow(color: .black.opacity(0.18), radius: 5, y: 2)
+            VStack(spacing: 2) {
+                if let name = projectName {
+                    Text(name)
+                        .font(.system(size: settings.fontSize.secondaryPt, weight: .regular))
+                        .foregroundStyle(dimmedTextColor)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Text(text)
+                    .font(.system(size: settings.fontSize.primaryPt, weight: .medium))
+                    .foregroundStyle(textColor)
+                    .contentTransition(.opacity)   // cross-fade text changes instead of a hard swap (no flicker)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(Capsule().fill(fill))
+            .overlay(Capsule().strokeBorder(borderColor, lineWidth: 1))
+            // Flatten to one layer so the shadow traces the capsule's
+            // rounded silhouette instead of its rectangular bounding box
+            // (SwiftUI draws boxy shadows on composed views otherwise).
+            .compositingGroup()
+            .shadow(color: .black.opacity(0.18), radius: 5, y: 2)
             Triangle()
                 .fill(fill)
                 .frame(width: 12, height: 7)
