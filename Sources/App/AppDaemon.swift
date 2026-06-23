@@ -131,6 +131,10 @@ final class AppDaemon: ObservableObject {
     }
 
     private func resolveTitle(for event: AgentEvent) {
+        // A title, once resolved, is stable — stop re-reading the transcript
+        // head on every subsequent event. Without this the transcript was
+        // re-read and re-parsed on every hook event of a session.
+        guard store.session(id: event.sessionId)?.title == nil else { return }
         let sessionId = event.sessionId
         let path: String? = event.transcriptPath
             ?? event.project.map { TranscriptReader.inferredPath(sessionId: sessionId, cwd: $0) }
@@ -147,8 +151,15 @@ final class AppDaemon: ObservableObject {
     /// Reads the transcript off-thread for the model of the latest assistant
     /// message — picks up `/model` switches mid-session, which Claude's hook
     /// payloads only report at `SessionStart`.
+    /// Reading the transcript tail to detect a `/model` switch is the heaviest
+    /// per-event work (128 KB read + JSON parse per line). The model rarely
+    /// changes mid-session and its initial value already comes from the hook
+    /// payload, so throttle this hard rather than running it on every event.
+    private let modelResolveThrottle = PerKeyThrottle(interval: 30)
+
     private func resolveModel(for event: AgentEvent) {
         guard event.agentKind == .claude else { return }
+        guard modelResolveThrottle.shouldRun(event.sessionId, now: Date()) else { return }
         let sessionId = event.sessionId
         let path: String? = event.transcriptPath
             ?? event.project.map { TranscriptReader.inferredPath(sessionId: sessionId, cwd: $0) }
