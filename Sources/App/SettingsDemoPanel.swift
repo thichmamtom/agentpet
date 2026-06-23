@@ -444,6 +444,8 @@ struct SettingsDemoPanel: View {
         case .waiting: return NSLocalizedString("Waiting", comment: "pet mood")
         case .done: return NSLocalizedString("Done", comment: "pet mood")
         case .celebrate: return NSLocalizedString("Celebrate", comment: "pet mood")
+        case .sleepy: return NSLocalizedString("Idle", comment: "pet mood")
+        case .levelup: return NSLocalizedString("Celebrate", comment: "pet mood")
         }
     }
 
@@ -453,6 +455,8 @@ struct SettingsDemoPanel: View {
         case .working: return .blue
         case .waiting: return .orange
         case .done, .celebrate: return .green
+        case .sleepy: return .secondary
+        case .levelup: return .green
         }
     }
 

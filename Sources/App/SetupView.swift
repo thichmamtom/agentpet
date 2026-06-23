@@ -740,7 +740,7 @@ private struct AnimationPicker: View {
     @State private var state: PetMood = .working
     @State private var hoveredClip: Int?
 
-    private let states: [PetMood] = [.idle, .working, .waiting, .done, .celebrate]
+    private let states: [PetMood] = [.idle, .working, .waiting, .done, .celebrate, .sleepy, .levelup]
 
     var body: some View {
         Picker("State", selection: $state) {
@@ -790,6 +790,8 @@ private struct AnimationPicker: View {
         case .waiting: return NSLocalizedString("Waiting", comment: "pet mood")
         case .done: return NSLocalizedString("Done", comment: "pet mood")
         case .celebrate: return NSLocalizedString("Celebrate", comment: "pet mood")
+        case .sleepy: return NSLocalizedString("Sleepy", comment: "pet mood")
+        case .levelup: return NSLocalizedString("Level up", comment: "pet mood")
         }
     }
 }

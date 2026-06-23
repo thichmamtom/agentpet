@@ -104,7 +104,7 @@ final class PetCareController: ObservableObject {
                 format: NSLocalizedString("Level up! Lv %d ⭐", comment: "pet level-up celebrate line"),
                 levelAfter
             )
-            PetController.shared.flashCelebrate(line: line)
+            PetController.shared.flashLevelUp(line: line)
         }
     }
 

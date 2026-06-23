@@ -86,9 +86,9 @@ final class PetController: ObservableObject {
     }
 
     /// Returns the effective sprite fps for a given mood, honouring the slider.
-    /// Idle is capped at 2 fps regardless of the slider value (idle CPU win).
+    /// Idle and sleepy are capped at 2 fps regardless of the slider value (calm CPU win).
     func spriteFPS(forMood mood: PetMood) -> Double {
-        mood == .idle ? min(animationFPS, 2) : animationFPS
+        (mood == .idle || mood == .sleepy) ? min(animationFPS, 2) : animationFPS
     }
 
     private var sizeAnimTimer: Timer?
@@ -137,9 +137,9 @@ final class PetController: ObservableObject {
             syncWindows()
             return
         }
-        if mood == .celebrate {
+        if mood == .celebrate || mood == .levelup {
             syncWindows()
-            return  // let the 3-second celebration finish regardless of new state
+            return  // let the 3-second celebrate / level-up burst finish regardless of new state
         }
         celebrateTimer?.invalidate()
         setMood(resolved)
@@ -177,14 +177,15 @@ final class PetController: ObservableObject {
         syncWindows()
     }
 
-    /// Plays a short celebrate burst with a custom line (e.g. a level-up),
-    /// then settles back to the aggregate mood. Sets `chatLine` directly —
-    /// `setMood` would re-roll it from the message pools.
-    func flashCelebrate(line: String) {
+    /// Plays a short level-up burst with a custom line, using the dedicated
+    /// `.levelup` mood (a distinct clip from the done-celebrate), then settles
+    /// back to the aggregate mood. Sets `chatLine` directly — `setMood` would
+    /// re-roll it from the message pools.
+    func flashLevelUp(line: String) {
         celebrateTimer?.invalidate()
         chatLineCount = 0
         activeAgentSessions = []
-        mood = .celebrate
+        mood = .levelup
         chatLine = line
         StatusBarController.shared.refreshTitle()
         celebrateTimer = Timer.scheduledTimer(withTimeInterval: Self.celebrateDuration, repeats: false) { _ in
@@ -267,7 +268,7 @@ final class PetController: ObservableObject {
     /// bubble isn't double-drawn); otherwise a per-mood pool pick.
     private func chatLine(forMood mood: PetMood, sessions: [AgentSession]) -> String {
         switch mood {
-        case .idle:
+        case .idle, .sleepy:
             guard showIdleMessage else { return "" }
             return idleLine()
         case .working, .waiting:
@@ -275,7 +276,7 @@ final class PetController: ObservableObject {
                 return sessions.map { "• \(TickerFormatter.line(for: $0))" }.joined(separator: "\n")
             }
             return chatLine(forMood: mood)
-        case .done, .celebrate:
+        case .done, .celebrate, .levelup:
             return chatLine(forMood: mood)
         }
     }
@@ -456,16 +457,16 @@ final class PetController: ObservableObject {
 
         // A break nudge overrides the home/default pet (rest visual + line) in
         // both split modes. Project pets keep their own mood — this nudges the
-        // user, not the agents. `.idle` is the rest visual until feature 2 adds
-        // a dedicated `sleepy` clip.
+        // user, not the agents. `.sleepy` is the rest visual; `.idle` on perk-up.
         if spec.key == PetWindowPlanner.defaultKey, let bs = breakState {
+            let mood: PetMood
             let line: String
             switch bs {
-            case .resting(let l): line = l
-            case .perkUp(let l): line = l
+            case .resting(let l): mood = .sleepy; line = l
+            case .perkUp(let l): mood = .idle; line = l
             }
             return PetWindowController.WindowState(
-                petID: petID, mood: .idle, sessions: [], count: 0, chatLine: line)
+                petID: petID, mood: mood, sessions: [], count: 0, chatLine: line)
         }
 
         // In single-window mode (splitPet OFF) the default spec IS the global
