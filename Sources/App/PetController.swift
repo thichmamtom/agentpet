@@ -359,6 +359,48 @@ final class PetController: ObservableObject {
     /// Keys currently in a celebrate burst, with the line to display.
     private var celebratingKeys: [String: String] = [:]
 
+    // MARK: - Break reminder (home pet rests)
+
+    /// Transient override shown on the home/default pet during a break.
+    private enum BreakDisplay {
+        case resting(line: String)
+        case perkUp(line: String)
+    }
+    private var breakState: BreakDisplay?
+    private var breakPerkTimer: Timer?
+
+    /// Puts the home/default pet into a resting state until `endBreakRest`.
+    /// Only the `default` window is affected; project pets keep their mood.
+    func beginBreakRest(line: String) {
+        breakPerkTimer?.invalidate()
+        breakState = .resting(line: line)
+        syncWindows()
+    }
+
+    /// Clears any in-progress break rest immediately (e.g. the user disabled the
+    /// reminder mid-break). Without this the home pet would stay "resting", since
+    /// only the break-over path clears `breakState`.
+    func cancelBreakRest() {
+        breakPerkTimer?.invalidate()
+        breakPerkTimer = nil
+        guard breakState != nil else { return }
+        breakState = nil
+        syncWindows()
+    }
+
+    /// Wakes the home/default pet: a short "back to work" line, then clears.
+    func endBreakRest(line: String) {
+        breakPerkTimer?.invalidate()
+        breakState = .perkUp(line: line)
+        syncWindows()
+        breakPerkTimer = Timer.scheduledTimer(withTimeInterval: Self.celebrateDuration, repeats: false) { _ in
+            Task { @MainActor [weak self] in
+                self?.breakState = nil
+                self?.syncWindows()
+            }
+        }
+    }
+
     /// Plans the per-project pet windows from the current sessions and reconciles
     /// the window registry. Single-pet mode (Split OFF) yields exactly one
     /// "default" window whose state mirrors today's aggregate behaviour.
@@ -367,7 +409,8 @@ final class PetController: ObservableObject {
             sessions: latestSessions,
             split: splitPet,
             mappings: ProjectPetSettings.shared.mappings,
-            defaultPetID: selectedPetID
+            defaultPetID: selectedPetID,
+            forceDefault: breakState != nil
         )
 
         let liveKeys = Set(specs.map(\.key))
@@ -410,6 +453,20 @@ final class PetController: ObservableObject {
             if let id = spec.petID, ImagePetStore.shared.pack(id: id) != nil { return id }
             return selectedPetID
         }()
+
+        // A break nudge overrides the home/default pet (rest visual + line) in
+        // both split modes. Project pets keep their own mood — this nudges the
+        // user, not the agents. `.idle` is the rest visual until feature 2 adds
+        // a dedicated `sleepy` clip.
+        if spec.key == PetWindowPlanner.defaultKey, let bs = breakState {
+            let line: String
+            switch bs {
+            case .resting(let l): line = l
+            case .perkUp(let l): line = l
+            }
+            return PetWindowController.WindowState(
+                petID: petID, mood: .idle, sessions: [], count: 0, chatLine: line)
+        }
 
         // In single-window mode (splitPet OFF) the default spec IS the global
         // aggregate, so mirror it verbatim — mood includes the transient

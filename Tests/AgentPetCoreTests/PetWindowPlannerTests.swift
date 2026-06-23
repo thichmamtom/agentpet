@@ -69,4 +69,28 @@ final class PetWindowPlannerTests: XCTestCase {
         XCTAssertEqual(specs.map(\.key), ["default"])   // nothing active → idle home
         XCTAssertEqual(specs[0].mood, .idle)
     }
+
+    func testForceDefaultAddsHomeWindowInSplitMode() {
+        // One active project session, split ON → normally only the project window.
+        let specs = PetWindowPlanner.plan(
+            sessions: [s("1", .working, project: "/work/foo")],
+            split: true, mappings: [cat], defaultPetID: "boba", forceDefault: true)
+        XCTAssertTrue(specs.contains { $0.key == "default" },
+                      "forceDefault must inject the home window for the break nudge")
+    }
+
+    func testForceDefaultDoesNotDuplicateExistingHome() {
+        // No active sessions → homeIdle already returns the default key.
+        let specs = PetWindowPlanner.plan(
+            sessions: [], split: true, mappings: [cat], defaultPetID: "boba", forceDefault: true)
+        XCTAssertEqual(specs.filter { $0.key == "default" }.count, 1,
+                       "forceDefault must not duplicate an existing home window")
+    }
+
+    func testForceDefaultOffKeepsCurrentBehaviour() {
+        let specs = PetWindowPlanner.plan(
+            sessions: [s("1", .working, project: "/work/foo")],
+            split: true, mappings: [cat], defaultPetID: "boba")   // forceDefault defaults false
+        XCTAssertFalse(specs.contains { $0.key == "default" })
+    }
 }

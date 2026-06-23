@@ -244,6 +244,7 @@ private struct GeneralTab: View {
     @ObservedObject var pet: PetController
     @ObservedObject private var sound = SoundSettings.shared
     @ObservedObject private var appLang = AppLanguage.shared
+    @ObservedObject private var breaks = BreakReminderSettings.shared
     // Local mirror of the system login-item state so the toggle re-renders
     // reliably (the SMAppService status isn't observable on its own).
     @State private var launchAtLogin = LoginItem.isEnabled
@@ -314,6 +315,26 @@ private struct GeneralTab: View {
                 }
                 .disabled(!pet.animationsEnabled)
                 .opacity(pet.animationsEnabled ? 1 : 0.5)
+            }
+
+            Section("Break reminder") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Remind me to take breaks")
+                        Text("The home pet nudges you to rest after a work stretch.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    ColorSwitch(isOn: $breaks.enabled)
+                }
+                Stepper("Work for: \(breaks.workIntervalMinutes) min",
+                        value: $breaks.workIntervalMinutes, in: 15...240, step: 15)
+                    .disabled(!breaks.enabled)
+                    .opacity(breaks.enabled ? 1 : 0.5)
+                Stepper("Break length: \(breaks.breakLengthMinutes) min",
+                        value: $breaks.breakLengthMinutes, in: 1...30, step: 1)
+                    .disabled(!breaks.enabled)
+                    .opacity(breaks.enabled ? 1 : 0.5)
             }
 
             Section("Notifications") {

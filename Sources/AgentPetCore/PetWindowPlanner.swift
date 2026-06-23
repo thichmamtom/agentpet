@@ -16,8 +16,21 @@ public enum PetWindowPlanner {
         s == .working || s == .waiting || s == .done
     }
 
+    /// Plans the per-project pet windows. `forceDefault` guarantees a home
+    /// ("default") window in the result even in split mode — used so a break
+    /// nudge always has a pet to show.
     public static func plan(sessions: [AgentSession], split: Bool,
-                            mappings: [ProjectPetMapping], defaultPetID: String?) -> [PetWindowSpec] {
+                            mappings: [ProjectPetMapping], defaultPetID: String?,
+                            forceDefault: Bool = false) -> [PetWindowSpec] {
+        let specs = planCore(sessions: sessions, split: split,
+                             mappings: mappings, defaultPetID: defaultPetID)
+        guard forceDefault, !specs.contains(where: { $0.key == defaultKey }) else { return specs }
+        return specs + [PetWindowSpec(key: defaultKey, projectName: nil, petID: defaultPetID,
+                                      sessionIDs: [], mood: .idle, count: 0)]
+    }
+
+    private static func planCore(sessions: [AgentSession], split: Bool,
+                                 mappings: [ProjectPetMapping], defaultPetID: String?) -> [PetWindowSpec] {
         let active = sessions.filter { isActive($0.state) }
 
         func homeIdle() -> [PetWindowSpec] {
