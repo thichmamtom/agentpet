@@ -55,28 +55,28 @@ private enum Thresholds {
 // MARK: - Phrase Pools
 
 private enum Phrases {
-    static let rateLimitLow = ["用量開始升喇～", "慢慢嚟，唔急", "留意下 quota"]
-    static let rateLimitHigh = ["Rate limit 快見底...", "要慳住用喇！", "Quota 唔多喇"]
-    static let rateLimitCritical = ["差唔多冇 quota 喇 😰", "停一停吖...", "Quota 幾乎用完"]
+    static let rateLimitLow = ["Usage is climbing~", "Take it easy, no rush", "Keep an eye on quota"]
+    static let rateLimitHigh = ["Rate limit running low…", "Use sparingly!", "Quota getting thin"]
+    static let rateLimitCritical = ["Almost out of quota 😰", "Maybe take a break…", "Quota nearly spent"]
 
-    static let dailyTokensLow = ["今日燒咗唔少 token～", "食咗好多 token 喇", "Token 消耗上升中"]
-    static let dailyTokensMid = ["大胃王模式！", "今日胃口好好～", "Token 食得好快"]
-    static let dailyTokensHigh = ["今日 token 用量爆炸 🔥", "Token 消耗超高！", "今日 burn 好勁"]
+    static let dailyTokensLow = ["Burned quite a few tokens today~", "Eaten a lot of tokens", "Token usage rising"]
+    static let dailyTokensMid = ["Big appetite mode!", "Great appetite today~", "Tokens going fast"]
+    static let dailyTokensHigh = ["Token usage off the charts today 🔥", "Token burn is extreme!", "Heavy burn today"]
 
-    static let sessionCountLow = ["5 個 agent 齊開～", "好多 agent 喺度做嘢", "並行度唔低"]
-    static let sessionCountHigh = ["指揮中心模式 😳", "咁多 session！", "全力運作中"]
+    static let sessionCountLow = ["5 agents running at once~", "Lots of agents at work", "Parallelism is up"]
+    static let sessionCountHigh = ["Command center mode 😳", "So many sessions!", "Full throttle"]
 
-    static let hungerLow = ["有少少肚餓...", "嗯...想食嘢", "肚子打鼓"]
-    static let hungerMid = ["好耐冇餵我喇 😢", "肚餓...", "想食嘢..."]
-    static let hungerHigh = ["你去咗邊... 😭", "快要餓暈喇", "好肚餓啊"]
+    static let hungerLow = ["A little hungry…", "Hmm… want food", "Tummy rumbling"]
+    static let hungerMid = ["Haven't been fed in a while 😢", "Hungry…", "Want food…"]
+    static let hungerHigh = ["Where did you go… 😭", "About to faint from hunger", "So hungry"]
 
-    static let streakLow = ["連續幾日！繼續加油", "連續好幾日～", "堅持緊"]
-    static let streakMid = ["成個禮拜冇斷過！", "好有毅力～", "太穩定喇"]
-    static let streakHigh = ["傳說級連續！", "太強喇！", "無人能擋"]
+    static let streakLow = ["Days in a row! Keep going", "Going strong~", "Keeping it up"]
+    static let streakMid = ["A whole week straight!", "Such persistence~", "So consistent"]
+    static let streakHigh = ["Legendary streak!", "Incredible!", "Unstoppable"]
 
-    static let dailyMealsLow = ["今日完成好多 session～", "效率唔錯", "做咗唔少嘢"]
-    static let dailyMealsMid = ["半百 session！效率怪物", "50+！", "超高產"]
-    static let dailyMealsHigh = ["破百！你今日唔駛瞓？", "100+ session！", "超人嚟嘅"]
+    static let dailyMealsLow = ["Lots of sessions today~", "Good productivity", "Got quite a bit done"]
+    static let dailyMealsMid = ["Fifty sessions! Efficiency beast", "50+!", "Super productive"]
+    static let dailyMealsHigh = ["Over 100! Not sleeping today?", "100+ sessions!", "Superhuman"]
 }
 
 // MARK: - CooldownTracker
@@ -149,7 +149,8 @@ public final class ReactiveEngine {
         guard let phrases = phrasePool(metric: metric, value: value) else { return nil }
         guard BubbleSettings.shared.reactiveBubblesEnabled else { return nil }
         guard cooldown.check(metric: metric, now: now) else { return nil }
-        return phrases.randomElement()
+        guard let phrase = phrases.randomElement() else { return nil }
+        return NSLocalizedString(phrase, comment: "reactive bubble")
     }
 
     // MARK: - Subscriptions
