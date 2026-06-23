@@ -2,6 +2,16 @@ import AppKit
 import SwiftUI
 import AgentPetCore
 
+// MARK: - Animations environment key
+
+private struct AnimationsEnabledKey: EnvironmentKey { static let defaultValue = true }
+extension EnvironmentValues {
+    var animationsEnabled: Bool {
+        get { self[AnimationsEnabledKey.self] }
+        set { self[AnimationsEnabledKey.self] = newValue }
+    }
+}
+
 /// Timing for `AnimatedStatusText`'s erase/retype/ellipsis-cycle phases.
 private let ERASE_INTERVAL: TimeInterval = 0.080
 private let TYPE_INTERVAL: TimeInterval = 0.045
@@ -15,6 +25,7 @@ struct PetView: View {
     var size: CGFloat = 120
     @ObservedObject private var imagePets = ImagePetStore.shared
     @ObservedObject private var bindings = PetBindingsStore.shared
+    @ObservedObject private var pet = PetController.shared
 
     var body: some View {
         content
@@ -25,7 +36,8 @@ struct PetView: View {
     @ViewBuilder private var content: some View {
         if let id = model.petID, let pack = imagePets.pack(id: id) {
             let clip = bindings.clipIndex(packId: pack.id, clipCount: pack.clipCount, mood: model.mood)
-            ImageSpriteView(frames: pack.clip(clip), mood: model.mood, size: size)
+            ImageSpriteView(frames: pack.clip(clip), mood: model.mood,
+                            fps: pet.spriteFPS(forMood: model.mood), size: size)
         } else {
             Image(systemName: "pawprint.fill")
                 .font(.system(size: size * 0.4))
@@ -56,7 +68,7 @@ struct FloatingPetView: View {
         VStack(spacing: 2) {
             if pet.showChat && model.petID != nil {
                 if bubbleSettings.multiAgentBubbleEnabled && !model.sessions.isEmpty {
-                    AgentBubble(sessions: model.sessions, forceProjectToken: model.projectName != nil)
+                    AgentBubble(sessions: model.sessions)
                         .padding(.horizontal, 10).padding(.vertical, 6)
                         .transition(AnyTransition.scale(scale: 0.6).combined(with: .opacity))
                 } else if !model.chatLine.isEmpty {
@@ -121,6 +133,7 @@ struct FloatingPetView: View {
         .animation(.easeInOut, value: pet.showChat)
         // Re-resolve bubble text when the app language changes at runtime.
         .environment(\.locale, appLang.locale)
+        .environment(\.animationsEnabled, pet.animationsEnabled)
     }
 }
 
@@ -136,13 +149,9 @@ private struct GroupedSession: Identifiable {
 /// Speech bubble listing one row per (agentKind, project) group.
 /// Applies filter/sort/cap from `BubbleSettings` before rendering.
 /// `tailEdge` controls whether the pointer arrow points down (pet) or up (menu bar).
-/// `forceProjectToken`: when true the `.project` token is shown even if the user
-/// hid it in BubbleSettings — used in split-pet windows so duplicate pets are
-/// distinguishable by their project name.
 struct AgentBubble: View {
     let sessions: [AgentSession]
     var tailEdge: Edge = .bottom
-    var forceProjectToken: Bool = false
     @ObservedObject private var settings = BubbleSettings.shared
 
     // attentionPriority is internal to AgentPetCore — use local rank
@@ -276,19 +285,16 @@ struct AgentBubble: View {
         switch settings.displayMode {
         case .list:
             ForEach(groupedSessions) { group in
-                AgentRow(session: group.session, count: group.count, chatStyle: isPetChat,
-                         forceProjectToken: forceProjectToken)
+                AgentRow(session: group.session, count: group.count, chatStyle: isPetChat)
             }
         case .carousel:
-            BubbleCarousel(groups: groupedSessions, chatStyle: isPetChat,
-                           forceProjectToken: forceProjectToken)
+            BubbleCarousel(groups: groupedSessions, chatStyle: isPetChat)
         case .compact:
             BubbleCompactLayout(
                 groups: groupedSessions,
                 totalCount: totalSessionCount,
                 chatStyle: isPetChat,
-                textColor: textColor,
-                forceProjectToken: forceProjectToken
+                textColor: textColor
             )
         }
     }
@@ -307,7 +313,6 @@ struct AgentBubble: View {
 private struct BubbleCarousel: View {
     let groups: [GroupedSession]
     var chatStyle: Bool = false
-    var forceProjectToken: Bool = false
     @ObservedObject private var settings = BubbleSettings.shared
     @State private var index = 0
     @State private var timer: Timer?
@@ -320,8 +325,7 @@ private struct BubbleCarousel: View {
         VStack(alignment: .leading, spacing: chatStyle ? 4 : 5) {
             Group {
                 if let group = groups[safe: index] {
-                    AgentRow(session: group.session, count: group.count, chatStyle: chatStyle,
-                             forceProjectToken: forceProjectToken)
+                    AgentRow(session: group.session, count: group.count, chatStyle: chatStyle)
                         .id(group.id)
                         .transition(.opacity)
                 }
@@ -477,7 +481,6 @@ private struct BubbleCompactLayout: View {
     let totalCount: Int
     var chatStyle: Bool = false
     let textColor: (Double) -> Color
-    var forceProjectToken: Bool = false
     @ObservedObject private var settings = BubbleSettings.shared
     @State private var expanded = false
 
@@ -490,8 +493,7 @@ private struct BubbleCompactLayout: View {
                 .foregroundStyle(textColor(0.45))
 
             ForEach(visibleGroups) { group in
-                AgentRow(session: group.session, count: group.count, chatStyle: chatStyle,
-                         forceProjectToken: forceProjectToken)
+                AgentRow(session: group.session, count: group.count, chatStyle: chatStyle)
             }
 
             if hiddenCount > 0 {
@@ -601,7 +603,7 @@ private struct AnimatedStatusText: View {
                     .foregroundStyle(color)
             }
         } else if isStable {
-            ShimmeringText(text: displayed, font: font, color: color)
+            Text(displayed).font(font).foregroundStyle(color)
         } else {
             Text(displayed)
                 .font(font)
@@ -690,54 +692,16 @@ private struct AnimatedStatusText: View {
     }
 }
 
-/// Bright band sweeping left-to-right over text via gradient mask, repeating
-/// every 2.5s. Pure SwiftUI animation — no timers — mirrors a CSS
-/// `background-clip: text` shimmer.
-private struct ShimmeringText: View {
-    let text: String
-    let font: Font
-    let color: Color
-
-    @State private var sweep = false
-
-    var body: some View {
-        let label = Text(text).font(font)
-        ZStack {
-            label.foregroundStyle(color.opacity(0.55))
-            label
-                .foregroundStyle(color)
-                .mask(
-                    GeometryReader { proxy in
-                        let w = proxy.size.width
-                        LinearGradient(
-                            colors: [.clear, .white, .clear],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                        .frame(width: w * 0.5)
-                        .offset(x: sweep ? w : -w * 0.5)
-                    }
-                )
-        }
-        .onAppear {
-            withAnimation(.linear(duration: 2.5).repeatForever(autoreverses: false)) {
-                sweep = true
-            }
-        }
-    }
-}
 
 /// One row per agent session. Iterates `BubbleSettings.effectiveLayout` tokens
 /// in order on a single line; project/title shrink before the message does.
-/// `forceProjectToken`: when true the `.project` token is always included even if
-/// the user hid it — used in split-pet windows for project disambiguation.
 private struct AgentRow: View {
     let session: AgentSession
     var count: Int = 1
     var chatStyle: Bool = false
-    var forceProjectToken: Bool = false
     @ObservedObject private var settings = BubbleSettings.shared
     @ObservedObject private var bubbleMsgs = BubbleMessages.shared
+    @Environment(\.animationsEnabled) private var animationsEnabled
 
     private var primaryPt: CGFloat { settings.fontSize.primaryPt }
     private var secondaryPt: CGFloat { settings.fontSize.secondaryPt }
@@ -753,11 +717,7 @@ private struct AgentRow: View {
     private static let waitingColor = Color(red: 0xF5 / 255.0, green: 0x9E / 255.0, blue: 0x0B / 255.0)
 
     var body: some View {
-        // In split-pet windows we force the `.project` token visible so the user
-        // can tell apart pets from different projects even if they hid it globally.
-        let visible = settings.effectiveLayout.tokens.filter {
-            ($0.isVisible || (forceProjectToken && $0.token == .project)) && tokenHasValue($0.token)
-        }
+        let visible = settings.effectiveLayout.tokens.filter { $0.isVisible && tokenHasValue($0.token) }
 
         HStack(alignment: .center, spacing: 4) {
             if visible.contains(where: { $0.token == .dot }) {
@@ -818,9 +778,9 @@ private struct AgentRow: View {
                 message: messageText,
                 font: .system(size: primaryPt, weight: isWaiting ? .semibold : .medium),
                 color: isWaiting ? Self.waitingColor : textColor(0.82),
-                animated: session.state != .done
+                animated: animationsEnabled && session.state != .done
             )
-            .modifier(WaitingTextFlash(active: isWaiting))
+            .modifier(WaitingTextFlash(active: isWaiting && animationsEnabled))
             .lineLimit(1)
             .truncationMode(.tail)
             .layoutPriority(1)
@@ -845,10 +805,17 @@ private struct AgentRow: View {
                     .layoutPriority(-1)
             }
         case .elapsed:
-            // Tick every second so the elapsed time counts up live instead of
-            // freezing at the value sampled when the row was last re-rendered.
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text(elapsedString(since: session.stateSince, now: context.date))
+            if animationsEnabled {
+                // Tick every second so the elapsed time counts up live instead of
+                // freezing at the value sampled when the row was last re-rendered.
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Text(elapsedString(since: session.stateSince, now: context.date))
+                        .font(.system(size: secondaryPt, weight: .regular))
+                        .foregroundStyle(textColor(0.45))
+                        .monospacedDigit()
+                }
+            } else {
+                Text(elapsedString(since: session.stateSince, now: Date()))
                     .font(.system(size: secondaryPt, weight: .regular))
                     .foregroundStyle(textColor(0.45))
                     .monospacedDigit()
@@ -1019,28 +986,26 @@ private struct StateDot: View {
     let color: Color
     let spins: Bool
     let style: BubbleSettings.DotStyle
-
-    private static let frames = ["✶", "✳", "✢", "✻", "✽", "✺"]
-    private static let frameInterval: TimeInterval = 0.15
+    @Environment(\.animationsEnabled) private var animationsEnabled
 
     var body: some View {
         Group {
-            switch style {
-            case .plain:
-                if spins {
-                    BloomingDot(color: color)
-                } else {
+            if !animationsEnabled || !spins {
+                // Static branch — no CALayer, no spin. Plain renders a flat
+                // circle; Claude renders the resting glyph. Identical to the
+                // pre-experiment off/idle path.
+                switch style {
+                case .plain:
                     Circle().fill(color).frame(width: 8, height: 8)
-                }
-            case .claude:
-                if spins {
-                    TimelineView(.periodic(from: .now, by: Self.frameInterval)) { context in
-                        let i = Int(context.date.timeIntervalSinceReferenceDate / Self.frameInterval) % Self.frames.count
-                        glyph(Self.frames[i])
-                    }
-                } else {
+                case .claude:
                     glyph("✻")
                 }
+            } else {
+                // Animated branch (animations on AND spinning) runs entirely in
+                // Core Animation — the ring bloom / glyph cycle live on the
+                // render server and never wake SwiftUI per frame.
+                StateDotLayer(color: color, style: style)
+                    .frame(width: 14, height: 14)
             }
         }
         // The active↔idle/done switch swaps to a wholly different view
@@ -1057,29 +1022,197 @@ private struct StateDot: View {
     }
 }
 
-/// Original plain-dot pulse: glow blooms outward from the dot and fades,
-/// repeating every 1.5s — the box-shadow-style animation for `.plain`.
-private struct BloomingDot: View {
-    let color: Color
-    @State private var blooming = false
+// MARK: - State dot (Core Animation)
 
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(color)
-                .frame(width: 8, height: 8)
-                .blur(radius: 3)
-                .scaleEffect(blooming ? 2.4 : 1)
-                .opacity(blooming ? 0 : 0.55)
-            Circle()
-                .fill(color)
-                .frame(width: 8, height: 8)
+/// SwiftUI bridge to the CALayer-backed state-dot animator. The bloom pulse
+/// (`.plain`) and the glyph cycle (`.claude`) both run as `CAAnimation`s on the
+/// render server, so — unlike a SwiftUI `TimelineView` — they do NOT force
+/// SwiftUI to re-render the bubble view tree every frame. Only the animated
+/// (animations-on + spinning) path is routed through here; the static paths
+/// stay plain SwiftUI.
+private struct StateDotLayer: NSViewRepresentable {
+    let color: Color
+    let style: BubbleSettings.DotStyle
+
+    func makeNSView(context: Context) -> StateDotNSView {
+        let view = StateDotNSView()
+        view.configure(color: color, style: style)
+        return view
+    }
+
+    func updateNSView(_ view: StateDotNSView, context: Context) {
+        // Called on every SwiftUI re-render of the parent. `configure` is
+        // idempotent: it only rebuilds layers / re-adds CAAnimations when the
+        // color or style actually changed, so an unrelated re-render never
+        // restarts (and visually jitters) the running animation.
+        view.configure(color: color, style: style)
+    }
+
+    static func dismantleNSView(_ view: StateDotNSView, coordinator: ()) {
+        view.teardown()
+    }
+}
+
+/// A layer-backed view that animates the state dot purely in Core Animation.
+/// `.plain` is a static center dot plus an expanding/fading ring; `.claude`
+/// cycles six pre-rendered glyph images via a discrete keyframe animation.
+final class StateDotNSView: NSView {
+    private static let glyphFrames = ["✶", "✳", "✢", "✻", "✽", "✺"]
+    private static let glyphInterval: TimeInterval = 0.15
+
+    private var lastColor: NSColor?
+    private var lastStyle: BubbleSettings.DotStyle?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) not used") }
+
+    /// Idempotent: rebuilds sublayers + re-adds animations only when `color` or
+    /// `style` changed since the last call. SwiftUI re-renders of the parent
+    /// therefore never churn the running CAAnimations.
+    func configure(color: Color, style: BubbleSettings.DotStyle) {
+        let nsColor = NSColor(color)
+        if let lastColor, let lastStyle,
+           lastColor == nsColor, lastStyle == style {
+            return  // nothing relevant changed — leave the animation running.
         }
-        .onAppear {
-            withAnimation(.easeOut(duration: 1.5).repeatForever(autoreverses: false)) {
-                blooming = true
-            }
+        lastColor = nsColor
+        lastStyle = style
+        rebuild(nsColor: nsColor, style: style)
+    }
+
+    private var currentScale: CGFloat { window?.backingScaleFactor ?? 2 }
+
+    private func rebuild(nsColor: NSColor, style: BubbleSettings.DotStyle) {
+        let host = layer ?? CALayer()
+        host.sublayers?.forEach { $0.removeFromSuperlayer() }
+        host.removeAllAnimations()
+        switch style {
+        case .plain:
+            buildPlain(on: host, nsColor: nsColor)
+        case .claude:
+            buildClaude(on: host, nsColor: nsColor)
         }
+    }
+
+    /// Center dot (8×8, static) + an expanding/fading ring (8×8) that scales
+    /// 1→2.4 while fading 0.55→0, repeating forever — the bloom, with no blur
+    /// and no per-frame SwiftUI/CPU cost.
+    private func buildPlain(on host: CALayer, nsColor: NSColor) {
+        let scale = currentScale
+        let dotRect = centeredRect(side: 8)
+
+        let ring = CALayer()
+        ring.frame = dotRect
+        ring.backgroundColor = nsColor.cgColor
+        ring.cornerRadius = 4
+        ring.contentsScale = scale
+        ring.opacity = 0  // resting value once the animation completes
+        host.addSublayer(ring)
+
+        let center = CALayer()
+        center.frame = dotRect
+        center.backgroundColor = nsColor.cgColor
+        center.cornerRadius = 4
+        center.contentsScale = scale
+        host.addSublayer(center)
+
+        let scaleAnim = CABasicAnimation(keyPath: "transform.scale")
+        scaleAnim.fromValue = 1.0
+        scaleAnim.toValue = 2.4
+        let opacityAnim = CABasicAnimation(keyPath: "opacity")
+        opacityAnim.fromValue = 0.55
+        opacityAnim.toValue = 0.0
+
+        let group = CAAnimationGroup()
+        group.animations = [scaleAnim, opacityAnim]
+        group.duration = 1.5
+        group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        group.repeatCount = .infinity
+        group.isRemovedOnCompletion = false
+        group.fillMode = .forwards
+        ring.add(group, forKey: "bloom")
+    }
+
+    /// A single 14×14 content layer whose `contents` cycles through the six
+    /// pre-rendered glyph images via a discrete keyframe animation.
+    private func buildClaude(on host: CALayer, nsColor: NSColor) {
+        let scale = currentScale
+        let images = Self.glyphFrames.compactMap { glyphImage($0, color: nsColor, scale: scale) }
+
+        let content = CALayer()
+        content.frame = bounds
+        content.contentsGravity = .center
+        content.contentsScale = scale
+        content.contents = images.first
+        host.addSublayer(content)
+
+        guard images.count > 1 else { return }
+        let anim = CAKeyframeAnimation(keyPath: "contents")
+        anim.calculationMode = .discrete
+        anim.values = images
+        anim.duration = Self.glyphInterval * Double(images.count)
+        anim.repeatCount = .infinity
+        anim.isRemovedOnCompletion = false
+        anim.fillMode = .forwards
+        content.add(anim, forKey: "glyphCycle")
+    }
+
+    /// Renders one glyph as a `CGImage` at backing scale.
+    private func glyphImage(_ s: String, color: NSColor, scale: CGFloat) -> CGImage? {
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.boldSystemFont(ofSize: 12),
+            .foregroundColor: color,
+        ]
+        let str = NSAttributedString(string: s, attributes: attrs)
+        let glyphSize = str.size()
+        let pointSize = NSSize(width: max(glyphSize.width.rounded(.up), 1),
+                               height: max(glyphSize.height.rounded(.up), 1))
+        let image = NSImage(size: pointSize)
+        image.lockFocus()
+        str.draw(at: .zero)
+        image.unlockFocus()
+        return image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+    }
+
+    private func centeredRect(side: CGFloat) -> CGRect {
+        CGRect(x: (bounds.width - side) / 2,
+               y: (bounds.height - side) / 2,
+               width: side, height: side)
+    }
+
+    override func layout() {
+        super.layout()
+        // Keep sublayer frames centered if the host bounds change. The SwiftUI
+        // `.frame(width:14,height:14)` fixes the size, so this is mostly a
+        // safety net for the initial layout pass.
+        guard let sublayers = layer?.sublayers else { return }
+        if lastStyle == .claude {
+            sublayers.forEach { $0.frame = bounds }
+        } else {
+            let dotRect = centeredRect(side: 8)
+            sublayers.forEach { $0.frame = dotRect }
+        }
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        // Re-render at the new backing scale for crispness on display changes.
+        if let style = lastStyle, let color = lastColor {
+            rebuild(nsColor: color, style: style)
+        }
+    }
+
+    /// Removes the running CAAnimations on teardown. Called from
+    /// `StateDotLayer.dismantleNSView` (Swift 6 forbids touching this from a
+    /// nonisolated `deinit`).
+    func teardown() {
+        layer?.removeAllAnimations()
+        layer?.sublayers?.forEach { $0.removeAllAnimations() }
     }
 }
 

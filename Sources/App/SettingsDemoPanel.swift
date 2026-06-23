@@ -127,6 +127,7 @@ struct SettingsDemoPanel: View {
                 if pet.showChat {
                     if bubble.multiAgentBubbleEnabled && !activeSessions.isEmpty {
                         AgentBubble(sessions: activeSessions)
+                            .environment(\.animationsEnabled, pet.animationsEnabled)
                             .transition(.scale(scale: 0.7).combined(with: .opacity))
                     } else if !previewLine.isEmpty {
                         ChatBubble(text: previewLine)
@@ -151,7 +152,10 @@ struct SettingsDemoPanel: View {
     @ViewBuilder private var petSprite: some View {
         if let pack {
             let clip = bindings.clipIndex(packId: pack.id, clipCount: pack.clipCount, mood: mood)
-            ImageSpriteView(frames: pack.clip(clip), mood: mood, size: min(max(pet.petPoint, 80), 120))
+            ImageSpriteView(frames: pack.clip(clip), mood: mood,
+                            fps: pet.spriteFPS(forMood: mood),
+                            size: min(max(pet.petPoint, 80), 120))
+                .environment(\.animationsEnabled, pet.animationsEnabled)
         } else {
             VStack(spacing: 6) {
                 Image(systemName: "pawprint.fill").font(.system(size: 30)).foregroundStyle(.secondary)

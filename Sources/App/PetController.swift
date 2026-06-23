@@ -33,6 +33,22 @@ final class PetController: ObservableObject {
             update(sessions: latestSessions)   // re-evaluate windows when toggled
         }
     }
+    /// When disabled, freezes all continuous/perpetual pet and bubble animation so
+    /// the SwiftUI render loop can go idle (lower CPU, reduce-motion option).
+    @Published var animationsEnabled: Bool =
+        (UserDefaults.standard.object(forKey: "agentpet.animationsEnabled") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(animationsEnabled, forKey: "agentpet.animationsEnabled") }
+    }
+    /// User-adjustable sprite frame rate (1–12 fps). Active moods animate at this
+    /// rate; idle is capped at 2 fps regardless of the slider (idle CPU win).
+    @Published var animationFPS: Double =
+        ((UserDefaults.standard.object(forKey: "agentpet.animationFPS") as? Double) ?? 8).clampedFPS {
+        didSet {
+            let v = animationFPS.clampedFPS
+            if v != animationFPS { animationFPS = v; return }   // re-entrancy guard for clamp
+            UserDefaults.standard.set(animationFPS, forKey: "agentpet.animationFPS")
+        }
+    }
     /// Sprite point size, freely adjustable via a slider.
     @Published var petPoint: Double {
         didSet { UserDefaults.standard.set(petPoint, forKey: Self.sizeKey) }
@@ -67,6 +83,12 @@ final class PetController: ObservableObject {
 
     func start() {
         // Ticker drives chatLine updates; no separate chat timer needed.
+    }
+
+    /// Returns the effective sprite fps for a given mood, honouring the slider.
+    /// Idle is capped at 2 fps regardless of the slider value (idle CPU win).
+    func spriteFPS(forMood mood: PetMood) -> Double {
+        mood == .idle ? min(animationFPS, 2) : animationFPS
     }
 
     private var sizeAnimTimer: Timer?
@@ -424,6 +446,13 @@ final class PetController: ObservableObject {
             chatLine: chatLine(forMood: spec.mood, sessions: groupSessions)
         )
     }
+}
+
+// MARK: - FPS helpers
+
+private extension Double {
+    /// Clamps a frame-rate value to the valid 1–12 fps slider range.
+    var clampedFPS: Double { min(max(self, 1), 12) }
 }
 
 /// Built-in (system) chat lines per mood.

@@ -287,6 +287,33 @@ private struct GeneralTab: View {
                     Spacer()
                     ColorSwitch(isOn: $pet.splitPet)
                 }
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Animate pets")
+                        Text("Turn off to freeze pet/bubble animation (lower CPU).")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    ColorSwitch(isOn: $pet.animationsEnabled)
+                }
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Animation speed")
+                        Text("Sprite frame rate. Idle is always capped at 2 fps.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    HStack(spacing: 8) {
+                        Slider(value: $pet.animationFPS, in: 1...12, step: 1)
+                            .frame(width: 120)
+                        Text("\(Int(pet.animationFPS)) fps")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                            .fixedSize()
+                    }
+                }
+                .disabled(!pet.animationsEnabled)
+                .opacity(pet.animationsEnabled ? 1 : 0.5)
             }
 
             Section("Notifications") {
@@ -541,7 +568,8 @@ private struct PetTab: View {
 
     @ViewBuilder private var petPreview: some View {
         if let pack = selectedPack {
-            ImageSpriteView(frames: pack.clip(0), mood: .idle, size: 78)
+            ImageSpriteView(frames: pack.clip(0), mood: .idle,
+                            fps: pet.spriteFPS(forMood: .idle), size: 78)
         } else {
             Image(systemName: "pawprint.fill").font(.system(size: 40)).foregroundStyle(.secondary)
         }
@@ -687,6 +715,7 @@ private struct PetThumb: View {
 private struct AnimationPicker: View {
     let pack: ImagePetPack
     @ObservedObject private var store = PetBindingsStore.shared
+    @ObservedObject private var pet = PetController.shared
     @State private var state: PetMood = .working
     @State private var hoveredClip: Int?
 
@@ -711,7 +740,8 @@ private struct AnimationPicker: View {
                     VStack(spacing: 3) {
                         Group {
                             if hoveredClip == i {
-                                ImageSpriteView(frames: pack.clip(i), mood: .working, size: 44)
+                                ImageSpriteView(frames: pack.clip(i), mood: .working,
+                                                fps: pet.spriteFPS(forMood: .working), size: 44)
                             } else {
                                 StaticFrame(image: pack.clip(i).first, size: 44)
                             }
