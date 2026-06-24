@@ -31,6 +31,10 @@ final class TranscriptUsageTests: XCTestCase {
         #"{"type":"assistant","message":{"usage":{"input_tokens":\#(input),"output_tokens":\#(output)},"content":[{"type":"text","text":"hi"}]}}"#
     }
 
+    private func codexTokenCountLine(total: Int, input: Int = 0, output: Int = 0) -> String {
+        #"{"timestamp":"2026-06-24T08:43:29.999Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":999,"output_tokens":111,"total_tokens":1110},"last_token_usage":{"input_tokens":\#(input),"cached_input_tokens":0,"output_tokens":\#(output),"reasoning_output_tokens":0,"total_tokens":\#(total)},"model_context_window":258400},"rate_limits":{"limit_id":"codex"}}}"#
+    }
+
     func testSumsUsageAcrossLines() {
         append([
             #"{"type":"user","message":{"content":"do the thing"}}"#,
@@ -54,6 +58,22 @@ final class TranscriptUsageTests: XCTestCase {
             #"{"type":"summary","summary":"A chat"}"#,
         ])
         XCTAssertEqual(TranscriptReader.newUsageTokens(at: path), 0)
+    }
+
+    func testSumsCodexTokenCountEvents() {
+        append([
+            #"{"timestamp":"2026-06-24T08:43:20.000Z","type":"response_item","payload":{"type":"message"}}"#,
+            codexTokenCountLine(total: 20_565, input: 19_901, output: 664),
+            codexTokenCountLine(total: 5_100, input: 5_000, output: 100),
+        ])
+        XCTAssertEqual(TranscriptReader.newUsageTokens(at: path), 25_665)
+    }
+
+    func testCodexTokenCountFallsBackToInputPlusOutput() {
+        append([
+            #"{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":3000,"output_tokens":250}}}}"#,
+        ])
+        XCTAssertEqual(TranscriptReader.newUsageTokens(at: path), 3_250)
     }
 
     func testPartialTrailingLineIsLeftForNextCall() {

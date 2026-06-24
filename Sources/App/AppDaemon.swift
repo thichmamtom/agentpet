@@ -78,20 +78,22 @@ final class AppDaemon: ObservableObject {
         refresh()
     }
 
-    /// Tokens appear in the transcript while Claude is still working, so the
-    /// pet eats live on tool events instead of waiting for `Stop`. Throttled
-    /// per session; reads are incremental (offset-based), so the `Stop` path
-    /// picking up the remainder never double-counts.
+    /// Tokens appear in supported transcripts while the agent is still working,
+    /// so the pet eats live on tool events and at Codex `Stop`. Throttled per
+    /// session while live; reads are incremental (offset-based), so the `Stop`
+    /// path picking up the remainder never double-counts.
     private var lastLiveFeed: [String: Date] = [:]
     private static let liveFeedInterval: TimeInterval = 10
 
     private func feedLiveTokens(for event: AgentEvent) {
-        guard event.agentKind == .claude, event.eventName != "Stop" else { return }
-        let path: String? = event.transcriptPath
-            ?? event.project.map { TranscriptReader.inferredPath(sessionId: event.sessionId, cwd: $0) }
+        guard [.claude, .codex].contains(event.agentKind),
+              !(event.agentKind == .claude && event.eventName == "Stop")
+        else { return }
+        let path = transcriptPath(for: event)
         guard let path else { return }
         let now = Date()
-        if let last = lastLiveFeed[event.sessionId],
+        if event.eventName != "Stop",
+           let last = lastLiveFeed[event.sessionId],
            now.timeIntervalSince(last) < Self.liveFeedInterval { return }
         lastLiveFeed[event.sessionId] = now
         Task.detached(priority: .utility) {
@@ -107,8 +109,7 @@ final class AppDaemon: ObservableObject {
     private func refineDoneIfQuestion(event: AgentEvent, before: AgentState?, session: AgentSession) {
         let sessionId = event.sessionId
         let stateSince = session.stateSince
-        let path: String? = event.transcriptPath
-            ?? event.project.map { TranscriptReader.inferredPath(sessionId: sessionId, cwd: $0) }
+        let path = transcriptPath(for: event)
         guard let path else {
             notifyIfNeeded(before: before, session: session)
             return
@@ -133,8 +134,7 @@ final class AppDaemon: ObservableObject {
 
     private func resolveTitle(for event: AgentEvent) {
         let sessionId = event.sessionId
-        let path: String? = event.transcriptPath
-            ?? event.project.map { TranscriptReader.inferredPath(sessionId: sessionId, cwd: $0) }
+        let path = transcriptPath(for: event)
         guard let path else { return }
         Task.detached(priority: .utility) { [weak self] in
             guard let title = TranscriptReader.title(at: path) else { return }
@@ -151,8 +151,7 @@ final class AppDaemon: ObservableObject {
     private func resolveModel(for event: AgentEvent) {
         guard event.agentKind == .claude else { return }
         let sessionId = event.sessionId
-        let path: String? = event.transcriptPath
-            ?? event.project.map { TranscriptReader.inferredPath(sessionId: sessionId, cwd: $0) }
+        let path = transcriptPath(for: event)
         guard let path else { return }
         Task.detached(priority: .utility) { [weak self] in
             guard let model = TranscriptReader.latestAssistantModel(at: path) else { return }
@@ -161,6 +160,12 @@ final class AppDaemon: ObservableObject {
                 self?.refresh()
             }
         }
+    }
+
+    private func transcriptPath(for event: AgentEvent) -> String? {
+        if let transcriptPath = event.transcriptPath { return transcriptPath }
+        guard event.agentKind == .claude, let project = event.project else { return nil }
+        return TranscriptReader.inferredPath(sessionId: event.sessionId, cwd: project)
     }
 
     private func notifyIfNeeded(before: AgentState?, session: AgentSession) {

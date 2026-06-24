@@ -109,7 +109,9 @@ struct FloatingPetView: View {
             }
         )
         .onPreferenceChange(PetContentSizeKey.self) { size in
-            PetWindowController.shared.resizeToContent(size)
+            Task { @MainActor in
+                PetWindowController.shared.resizeToContent(size)
+            }
         }
         .animation(.easeInOut(duration: 0.22), value: pet.chatLine)
         .animation(.spring(response: 0.35, dampingFraction: 0.7), value: pet.activeAgentSessions.count)

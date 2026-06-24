@@ -84,10 +84,10 @@ public enum TranscriptReader {
         usageOffsets.removeAll()
     }
 
-    /// Sums the model usage tokens (input + output) that were *appended* to the
-    /// transcript since the previous call for the same path. The first call for
-    /// a path consumes the whole file. Feeds the pet: each Claude `Stop` reads
-    /// only the new bytes, so repeated calls are cheap even on big transcripts.
+    /// Sums the model usage tokens that were *appended* to the transcript since
+    /// the previous call for the same path. The first call for a path consumes
+    /// the whole file. Feeds the pet: each lifecycle hook reads only the new
+    /// bytes, so repeated calls are cheap even on big transcripts.
     ///
     /// Returns `nil` when the file can't be read; `0` when no new usage lines
     /// appeared.
@@ -117,14 +117,11 @@ public enum TranscriptReader {
         var total = 0
         for line in text.components(separatedBy: "\n") {
             // Fast reject: most lines carry no usage object at all.
-            guard line.contains("\"usage\"") else { continue }
+            guard line.contains("\"usage\"") || line.contains("\"token_count\"") else { continue }
             guard let data = line.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let message = json["message"] as? [String: Any],
-                  let usage = message["usage"] as? [String: Any]
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             else { continue }
-            total += (usage["input_tokens"] as? Int ?? 0)
-            total += (usage["output_tokens"] as? Int ?? 0)
+            total += usageTokens(from: json)
         }
         return total
     }
@@ -257,6 +254,40 @@ public enum TranscriptReader {
         }
 
         return nil
+    }
+
+    private static func usageTokens(from json: [String: Any]) -> Int {
+        if let message = json["message"] as? [String: Any],
+           let usage = message["usage"] as? [String: Any] {
+            return max(0, intValue(usage["input_tokens"]) ?? 0)
+                + max(0, intValue(usage["output_tokens"]) ?? 0)
+        }
+
+        guard json["type"] as? String == "event_msg",
+              let payload = json["payload"] as? [String: Any],
+              payload["type"] as? String == "token_count",
+              let info = payload["info"] as? [String: Any],
+              let last = info["last_token_usage"] as? [String: Any]
+        else { return 0 }
+
+        if let total = intValue(last["total_tokens"]) {
+            return max(0, total)
+        }
+        return max(0, intValue(last["input_tokens"]) ?? 0)
+            + max(0, intValue(last["output_tokens"]) ?? 0)
+    }
+
+    private static func intValue(_ value: Any?) -> Int? {
+        switch value {
+        case let int as Int:
+            return int
+        case let number as NSNumber:
+            return number.intValue
+        case let double as Double:
+            return Int(double)
+        default:
+            return nil
+        }
     }
 
     private static func cleanRecap(_ text: String) -> String? {

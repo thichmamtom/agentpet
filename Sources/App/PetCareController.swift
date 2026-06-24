@@ -68,7 +68,7 @@ final class PetCareController: ObservableObject {
         mutateCurrent { PetCare.recordMeal(state: &$0, now: Date()) }
     }
 
-    /// Tokens consumed by a Claude turn (transcript usage delta).
+    /// Tokens consumed by an agent turn (transcript usage delta).
     func feedTokens(_ tokens: Int) {
         guard tokens > 0 else { return }
         mutateCurrent { PetCare.feedTokens(tokens, state: &$0, now: Date()) }
