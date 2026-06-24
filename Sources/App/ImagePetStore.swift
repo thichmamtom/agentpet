@@ -34,9 +34,11 @@ final class ImagePetStore: ObservableObject {
     }
 
     /// Launch path: slice only the prioritised pack synchronously so the pet and
-    /// menu bar can appear immediately, then slice the remaining packs on later
-    /// run-loop ticks (yielding between each) so a large library never blocks the
-    /// app from showing up.
+    /// menu bar can appear immediately, then slice the remaining packs OFF the
+    /// main thread and publish once. Slicing on the main actor (even chunked)
+    /// starved the pet's frame timer at launch — the animation crawled until the
+    /// library finished loading. Decoding happens on a background queue; only the
+    /// finished, immutable packs are handed back to the main actor.
     func loadFast(priorityID: String?) {
         let dirs = Self.directories(in: petsDir)
         let priorityDir = priorityID
@@ -47,17 +49,14 @@ final class ImagePetStore: ObservableObject {
         }
         let rest = dirs.filter { $0 != priorityDir }
         guard !rest.isEmpty else { return }
-        Task { @MainActor in
-            // Slice the rest into a local accumulator and publish ONCE at the end.
-            // Re-assigning `packs` per pet made PetView (which observes the store)
-            // re-render on every pet, stuttering the sprite animation at launch.
-            var acc = packs
-            for dir in rest {
-                await Task.yield()   // let the menu bar + pet paint first
-                guard let pack = SpriteSlicer.loadPack(directory: dir) else { continue }
-                acc.append(pack)
+        Task.detached(priority: .utility) {
+            let more = rest.compactMap { SpriteSlicer.loadPack(directory: $0) }
+            let box = UncheckedSendableBox(more)
+            await MainActor.run {
+                // Keep the already-shown priority pack, add the rest, sort once.
+                let store = ImagePetStore.shared
+                store.packs = (store.packs + box.value).sorted { $0.displayName < $1.displayName }
             }
-            packs = acc.sorted { $0.displayName < $1.displayName }
         }
     }
 
@@ -67,4 +66,12 @@ final class ImagePetStore: ObservableObject {
             at: dir, includingPropertiesForKeys: [.isDirectoryKey]) else { return [] }
         return entries.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
     }
+}
+
+/// Carries a non-Sendable payload (sliced `ImagePetPack`s hold `NSImage`s) from
+/// a background slicing task to the main actor. Safe because the packs are
+/// immutable and built fresh off-thread, then only read on the main actor.
+private struct UncheckedSendableBox<T>: @unchecked Sendable {
+    let value: T
+    init(_ value: T) { self.value = value }
 }
